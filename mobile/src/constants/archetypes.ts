@@ -18,11 +18,23 @@ export const ARCHETYPES = [
   ] },
 ] as const;
 
+export type Question = { id: string; text: string; options: readonly string[] };
+
 export const AVATARS = ['🧙', '🥷', '🧑‍🚀', '🦊', '🐸', '🤖', '👾', '🐱'];
 
-export const STATUSES = [
+export const INTENTS = [
   { id: 'open', label: 'Open to meeting' },
   { id: 'food', label: 'Looking for food' },
   { id: 'hour', label: 'Free for the hour' },
-  { id: 'off', label: 'Not discoverable' },
 ] as const;
+
+export const BUDGETS = [['free', 'Free only'], ['low', 'Cheap'], ['any', 'Whatever']] as const;
+
+export const archetypeById = (id: string) => ARCHETYPES.find(a => a.id === id);
+
+export const questionsFor = (archetypes: readonly string[]): Question[] =>
+  ARCHETYPES.filter(a => archetypes.includes(a.id)).flatMap(a => a.questions as readonly Question[]);
+
+// Drop answers for classes that were un-picked after answering, so they can't skew scoring.
+export const keepAnswers = (archetypes: readonly string[], answers: Record<string, string>) =>
+  Object.fromEntries(questionsFor(archetypes).flatMap(q => (answers[q.id] ? [[q.id, answers[q.id]]] : [])));

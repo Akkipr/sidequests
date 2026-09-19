@@ -7,5 +7,6 @@ P=$(find node_modules -path '*expo-modules-jsi/apple/Package.swift')
 [ -n "$H" ] && perl -pi -e 's/SWIFT_RETURNS_RETAINED (RuntimeScheduler\()/$1/' $H
 # 2. Swift 6.2 wrongly errors on its nonisolated(unsafe) captures. Swift 5 mode makes those warnings;
 #    re-enable the Swift 6 features the code actually uses.
-[ -n "$P" ] && perl -pi -e 's/swiftLanguageModes: \[\.v6\]/swiftLanguageModes: [.v5]/; s/(\.enableUpcomingFeature\("InferIsolatedConformances"\),)/$1 .enableUpcomingFeature("BareSlashRegexLiterals"), .enableUpcomingFeature("IsolatedDefaultValues"), .enableUpcomingFeature("GlobalActorIsolatedTypesUsability"),/' $P
+# Only patch once: re-running (every `npm install` does) would duplicate the feature flags and break the build.
+[ -n "$P" ] && ! grep -q BareSlashRegexLiterals "$P" && perl -pi -e 's/swiftLanguageModes: \[\.v6\]/swiftLanguageModes: [.v5]/; s/(\.enableUpcomingFeature\("InferIsolatedConformances"\),)/$1 .enableUpcomingFeature("BareSlashRegexLiterals"), .enableUpcomingFeature("IsolatedDefaultValues"), .enableUpcomingFeature("GlobalActorIsolatedTypesUsability"),/' $P
 exit 0
