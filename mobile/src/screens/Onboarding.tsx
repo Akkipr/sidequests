@@ -1,15 +1,20 @@
 import { useState } from 'react';
-import { Alert, Pressable, TextInput } from 'react-native';
-import { api, Profile } from '../api';
+import { Alert, Pressable } from 'react-native';
+import { Profile, signup } from '../api';
 import { ARCHETYPES, AVATARS } from '../archetypes';
-import { Btn, C, Chip, FONT, Panel, Row, Screen, Txt } from '../ui';
+import { Btn, C, Chip, Field, Panel, Row, Screen, Txt } from '../ui';
+import SignIn from './SignIn';
 
 const BUDGETS = [['free', 'Free only'], ['low', 'Cheap'], ['any', 'Whatever']] as const;
+const MIN_PASSWORD = 8; // keep in sync with server/index.js
 const toggle = (xs: string[], x: string) => (xs.includes(x) ? xs.filter(v => v !== x) : [...xs, x]);
 
 export default function Onboarding({ onDone }: { onDone: (p: Profile) => void }) {
   const [step, setStep] = useState(0);
+  const [signIn, setSignIn] = useState(false);
   const [nickname, setNickname] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [avatar, setAvatar] = useState(AVATARS[0]);
   const [archetypes, setArchetypes] = useState<string[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -25,9 +30,14 @@ export default function Onboarding({ onDone }: { onDone: (p: Profile) => void })
     try {
       // Drop answers for classes un-picked after answering, they'd skew scoring.
       const kept = Object.fromEntries(questions.map(q => [q.id, answers[q.id]]));
-      onDone(await api<Profile>('/profile', { nickname, avatar, archetypes, answers: kept, wants, budget }));
+      onDone(await signup({ nickname: nickname.trim(), password, avatar, archetypes, answers: kept, wants, budget }));
     } catch (e: any) {
-      Alert.alert('Save failed', e.message);
+      if (e.status === 409) {
+        Alert.alert('Name taken', 'Someone already has that name. Pick another.');
+        setStep(0);
+      } else {
+        Alert.alert('Save failed', e.message);
+      }
       setSaving(false);
     }
   }
@@ -35,14 +45,22 @@ export default function Onboarding({ onDone }: { onDone: (p: Profile) => void })
   const steps = [
     {
       title: 'NEW PLAYER',
-      ok: nickname.trim().length > 0,
+      ok: nickname.trim().length > 0 && password.length >= MIN_PASSWORD && password === confirm,
       body: (
         <>
           <Panel>
             <Txt>ENTER NAME:</Txt>
-            <TextInput value={nickname} onChangeText={setNickname} maxLength={24} autoFocus placeholder="_"
-              placeholderTextColor={C.dim}
-              style={{ fontFamily: FONT, fontSize: 14, color: C.gold, borderBottomWidth: 3, borderColor: C.ink, paddingVertical: 8 }} />
+            <Field value={nickname} onChangeText={setNickname} maxLength={24} autoFocus />
+          </Panel>
+          <Panel>
+            <Txt>PASSWORD:</Txt>
+            <Field value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" autoCorrect={false} />
+            {password.length > 0 && password.length < MIN_PASSWORD && (
+              <Txt size={8} color={C.pink}>MIN {MIN_PASSWORD} CHARACTERS</Txt>
+            )}
+            <Txt>CONFIRM:</Txt>
+            <Field value={confirm} onChangeText={setConfirm} secureTextEntry autoCapitalize="none" autoCorrect={false} />
+            {confirm.length > 0 && confirm !== password && <Txt size={8} color={C.pink}>PASSWORDS DON'T MATCH</Txt>}
           </Panel>
           <Panel>
             <Txt>PICK AVATAR:</Txt>
@@ -99,6 +117,8 @@ export default function Onboarding({ onDone }: { onDone: (p: Profile) => void })
   const s = steps[step];
   const last = step === steps.length - 1;
 
+  if (signIn) return <SignIn onDone={onDone} onBack={() => setSignIn(false)} />;
+
   return (
     <Screen title={s.title}>
       <Txt color={C.dim} size={8}>STAGE {step + 1}/{steps.length}</Txt>
@@ -106,6 +126,7 @@ export default function Onboarding({ onDone }: { onDone: (p: Profile) => void })
       <Btn label={last ? (saving ? 'SAVING...' : 'START GAME') : 'NEXT ▶'} disabled={!s.ok || saving}
         onPress={last ? save : () => setStep(step + 1)} />
       {step > 0 && <Btn label="◀ BACK" color={C.dim} small onPress={() => setStep(step - 1)} />}
+      {step === 0 && <Btn label="HAVE A PLAYER? SIGN IN" color={C.dim} small onPress={() => setSignIn(true)} />}
     </Screen>
   );
 }

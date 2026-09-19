@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleProp, Text, TextProps, View, ViewStyle } from 'react-native';
+import { Pressable, ScrollView, StyleProp, Text, TextInput, TextInputProps, TextProps, View, ViewStyle } from 'react-native';
 
 export const C = {
   bg: '#1b1b2f', panel: '#2e2e4f', ink: '#f4f4e8', dim: '#8a8aa8', shadow: '#000',
@@ -48,6 +48,12 @@ export function Btn({ label, onPress, color = C.gold, disabled, small }: {
     </Pressable>
   );
 }
+
+// Underlined text input in the panel style.
+export const Field = (p: TextInputProps) => (
+  <TextInput placeholder="_" placeholderTextColor={C.dim}
+    style={{ fontFamily: FONT, fontSize: 14, color: C.gold, borderBottomWidth: 3, borderColor: C.ink, paddingVertical: 8 }} {...p} />
+);
 
 // Toggle chip for multi/single selects.
 export const Chip = ({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) => (

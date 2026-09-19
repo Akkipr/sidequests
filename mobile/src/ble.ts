@@ -1,4 +1,4 @@
-import { BleManager, Device, State } from 'react-native-ble-plx';
+import { BleManager, Device, State, Subscription } from 'react-native-ble-plx';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PermissionsAndroid, Platform } from 'react-native';
 
@@ -44,6 +44,9 @@ function findStrongest(ms = 4000) {
   });
 }
 
+// The live connection and its listeners, so a sign-out can tear them down.
+let link: { device: Device; subs: Subscription[] } | null = null;
+
 export async function connectWearable(
   onSignal: (s: 'MATCH' | 'IDLE') => void,
   onDisconnect: () => void,
@@ -57,13 +60,29 @@ export async function connectWearable(
   await device.discoverAllServicesAndCharacteristics();
   await AsyncStorage.setItem('wearableId', id);
 
-  device.monitorCharacteristicForService(SERVICE_UUID, MATCH_UUID, (err, c) => {
-    if (err || !c?.value) return;
-    const v = atob(c.value).trim();
-    if (v === 'MATCH' || v === 'IDLE') onSignal(v);
-  });
-  device.onDisconnected(() => onDisconnect());
+  link?.subs.forEach(s => s.remove());
+  link = {
+    device,
+    subs: [
+      device.monitorCharacteristicForService(SERVICE_UUID, MATCH_UUID, (err, c) => {
+        if (err || !c?.value) return;
+        const v = atob(c.value).trim();
+        if (v === 'MATCH' || v === 'IDLE') onSignal(v);
+      }),
+      device.onDisconnected(() => onDisconnect()),
+    ],
+  };
   return device;
+}
+
+// Sign-out: a wearable belongs to one person, so drop the link and forget the pairing.
+// Listeners go first so the disconnect doesn't report "Wearable disconnected" to the next player.
+export async function disconnectWearable() {
+  const l = link;
+  link = null;
+  l?.subs.forEach(s => s.remove());
+  await l?.device.cancelConnection().catch(() => {});
+  await forgetWearable();
 }
 
 export const forgetWearable = () => AsyncStorage.removeItem('wearableId');

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts, PressStart2P_400Regular } from '@expo-google-fonts/press-start-2p';
-import { api, Profile, Quest as Q, Status } from './src/api';
-import { connectWearable } from './src/ble';
+import { api, getToken, isAuthError, logout, onAuthLost, Profile, Quest as Q, Status } from './src/api';
+import { connectWearable, disconnectWearable } from './src/ble';
 import { Btn, C, Screen, Txt } from './src/ui';
 import Onboarding from './src/screens/Onboarding';
 import Home, { Wearable } from './src/screens/Home';
@@ -27,15 +27,34 @@ export default function App() {
   const busy = useRef(false);
   const near = useRef(false);
 
+  // Back to a blank slate, ready for onboarding / sign-in as whoever is next.
+  function resetSession() {
+    near.current = false;
+    seen.current.clear();
+    setRoute({ name: 'home' });
+    setStatus('off');
+    setWearable({ state: 'idle' });
+    setProfile(null);
+  }
+  // A revoked session (401) lands here too, so it must be registered before boot() runs.
+  useEffect(() => onAuthLost(resetSession), []);
+
   const boot = () => {
     setBootErr('');
-    api<Profile | null>('/profile').then(p => {
+    // No token = never signed in (or signed out): straight to onboarding, no network needed.
+    getToken().then(t => (t ? api<Profile | null>('/profile') : null)).then(p => {
       // Discovery is off by default every launch.
       if (p && p.status !== 'off') api('/status', { status: 'off' }).catch(() => {});
       setProfile(p);
-    }, e => setBootErr(e.message));
+    }, e => { if (!isAuthError(e)) setBootErr(e.message); }); // auth errors already reset via onAuthLost
   };
   useEffect(boot, []);
+
+  async function signOut() {
+    await disconnectWearable();
+    await logout();
+    resetSession();
+  }
 
   // The wearable notifies MATCH once per encounter and IDLE when out of range. The other phone may
   // report a few seconds later, so keep asking the server (~20s) while still in range.
@@ -104,7 +123,7 @@ export default function App() {
       ) : route.name === 'quest' ? (
         <Quest quest={route.quest} onBack={() => setRoute({ name: 'match', id: route.matchId })} />
       ) : (
-        <Home profile={profile} status={status} onStatus={changeStatus} wearable={wearable} onConnect={connect} />
+        <Home profile={profile} status={status} onStatus={changeStatus} wearable={wearable} onConnect={connect} onSignOut={signOut} />
       )}
     </>
   );

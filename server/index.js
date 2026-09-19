@@ -1,5 +1,6 @@
 require('dotenv').config();
 const crypto = require('crypto');
+const { promisify } = require('util');
 const express = require('express');
 const { Pool } = require('pg');
 const { score, THRESHOLD } = require('./score');
@@ -11,40 +12,91 @@ const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const app = express();
 app.use(express.json());
 
-// Each phone gets a random device key on first launch; we only store its hash.
-app.post('/register', async (req, res) => {
-  const key = crypto.randomBytes(32).toString('hex');
-  const [u] = await q('insert into users (key_hash) values ($1) returning id', [sha(key)]);
-  res.json({ userId: u.id, key });
-});
+// Accounts: the nickname is the login name (unique, case-insensitive) and the phone holds a random
+// session token; we only store its hash. Signing out deletes the session row.
+const scrypt = promisify(crypto.scrypt);
+const MIN_PASSWORD = 8;
 
-app.use(async (req, res, next) => {
-  const key = req.headers.authorization?.replace('Bearer ', '') ?? '';
-  const [u] = await q('select id from users where key_hash = $1', [sha(key)]);
-  if (!u) return res.status(401).json({ error: 'unauthorized' });
-  req.uid = u.id;
-  next();
-});
+async function hashPassword(password) {
+  const salt = crypto.randomBytes(16);
+  return `${salt.toString('hex')}:${(await scrypt(password, salt, 64)).toString('hex')}`;
+}
+async function checkPassword(password, stored) {
+  const [salt, hash] = stored.split(':');
+  const got = await scrypt(password, Buffer.from(salt, 'hex'), 64);
+  return crypto.timingSafeEqual(got, Buffer.from(hash, 'hex'));
+}
+// Burn the same scrypt time for unknown nicknames so login timing doesn't reveal which exist.
+const DUMMY = hashPassword('not-a-real-password');
+
+async function newSession(client, userId) {
+  const token = crypto.randomBytes(32).toString('hex');
+  await client.query('insert into sessions (token_hash, user_id) values ($1,$2)', [sha(token), userId]);
+  return token;
+}
 
 const ARCHETYPES = ['explorer', 'foodie', 'active', 'creator'];
 const onlyArchetypes = (xs) => Array.isArray(xs) && xs.every(x => ARCHETYPES.includes(x));
 
+app.post('/signup', async (req, res) => {
+  const { nickname, password, avatar, archetypes, answers = {}, wants = [], budget = 'low' } = req.body;
+  const name = typeof nickname === 'string' ? nickname.trim().slice(0, 24) : '';
+  if (!name || !avatar || !archetypes?.length || !onlyArchetypes(archetypes) || !onlyArchetypes(wants))
+    return res.status(400).json({ error: 'nickname, avatar and at least one archetype required' });
+  if (typeof password !== 'string' || password.length < MIN_PASSWORD || password.length > 200)
+    return res.status(400).json({ error: `password must be ${MIN_PASSWORD}-200 characters` });
+
+  const client = await db.connect();
+  try {
+    await client.query('begin');
+    const { rows: [u] } = await client.query(
+      'insert into users (password_hash, nickname_key) values ($1,$2) returning id',
+      [await hashPassword(password), name.toLowerCase()]);
+    await client.query(
+      `insert into profiles (user_id, nickname, avatar, archetypes, answers, wants, budget)
+       values ($1,$2,$3,$4,$5,$6,$7)`,
+      [u.id, name, avatar, archetypes, answers, wants, budget]);
+    const token = await newSession(client, u.id);
+    await client.query('commit');
+    res.json({ token });
+  } catch (e) {
+    await client.query('rollback').catch(() => {});
+    if (e.code === '23505') return res.status(409).json({ error: 'nickname taken' });
+    throw e;
+  } finally {
+    client.release();
+  }
+});
+
+app.post('/login', async (req, res) => {
+  const { nickname, password } = req.body;
+  const [u] = typeof nickname === 'string'
+    ? await q('select id, password_hash from users where nickname_key = $1', [nickname.trim().toLowerCase()])
+    : [];
+  const ok = typeof password === 'string' && password.length <= 200
+    && await checkPassword(password, u?.password_hash ?? await DUMMY) && !!u;
+  if (!ok) return res.status(401).json({ error: 'wrong nickname or password' });
+  res.json({ token: await newSession(db, u.id) });
+});
+
+app.use(async (req, res, next) => {
+  const token = req.headers.authorization?.replace('Bearer ', '') ?? '';
+  const [s] = await q('select user_id from sessions where token_hash = $1', [sha(token)]);
+  if (!s) return res.status(401).json({ error: 'unauthorized' });
+  req.uid = s.user_id;
+  req.tokenHash = sha(token);
+  next();
+});
+
+app.post('/logout', async (req, res) => {
+  await q('delete from sessions where token_hash = $1', [req.tokenHash]);
+  await q("update profiles set status = 'off' where user_id = $1", [req.uid]);
+  res.json({ ok: true });
+});
+
 app.get('/profile', async (req, res) => {
   const [p] = await q('select * from profiles where user_id = $1', [req.uid]);
   res.json(p ?? null);
-});
-
-app.post('/profile', async (req, res) => {
-  const { nickname, avatar, archetypes, answers = {}, wants = [], budget = 'low' } = req.body;
-  if (!nickname?.trim() || !avatar || !archetypes?.length || !onlyArchetypes(archetypes) || !onlyArchetypes(wants))
-    return res.status(400).json({ error: 'nickname, avatar and at least one archetype required' });
-  const [p] = await q(
-    `insert into profiles (user_id, nickname, avatar, archetypes, answers, wants, budget)
-     values ($1,$2,$3,$4,$5,$6,$7)
-     on conflict (user_id) do update set nickname=$2, avatar=$3, archetypes=$4, answers=$5, wants=$6, budget=$7, updated_at=now()
-     returning *`,
-    [req.uid, nickname.trim().slice(0, 24), avatar, archetypes, answers, wants, budget]);
-  res.json(p);
 });
 
 app.post('/status', async (req, res) => {

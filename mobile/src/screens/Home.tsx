@@ -1,4 +1,4 @@
-import { View } from 'react-native';
+import { Alert, View } from 'react-native';
 import { Profile, Status } from '../api';
 import { ARCHETYPES, STATUSES } from '../archetypes';
 import { Btn, C, Chip, Panel, Row, Screen, Txt, useBlink } from '../ui';
@@ -12,12 +12,19 @@ const LINK = {
   error: ['LINK FAILED', C.pink],
 } as const;
 
-export default function Home({ profile, status, onStatus, wearable, onConnect }: {
+export default function Home({ profile, status, onStatus, wearable, onConnect, onSignOut }: {
   profile: Profile; status: Status; onStatus: (s: Status) => void; wearable: Wearable; onConnect: () => void;
+  onSignOut: () => void;
 }) {
   const blink = useBlink();
   const [label, color] = LINK[wearable.state];
   const live = status !== 'off' && wearable.state === 'connected';
+
+  const confirmSignOut = () =>
+    Alert.alert('SIGN OUT?', "You'll need your name and password to come back.", [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign out', style: 'destructive', onPress: onSignOut },
+    ]);
 
   return (
     <Screen title="SIDEQUESTS">
@@ -59,6 +66,8 @@ export default function Home({ profile, status, onStatus, wearable, onConnect }:
           {live ? 'Keep the app open. We\'ll ping you when a match is near.' : 'Your wearable never broadcasts who you are.'}
         </Txt>
       </Panel>
+
+      <Btn small label="SIGN OUT" color={C.dim} onPress={confirmSignOut} />
     </Screen>
   );
 }

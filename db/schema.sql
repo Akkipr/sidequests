@@ -2,8 +2,21 @@
 -- Run once:  psql "$DATABASE_URL" -f db/schema.sql
 
 create table if not exists users (
-  id         uuid primary key default gen_random_uuid(),
-  key_hash   text not null unique,          -- sha256 of the device key the phone holds
+  id            uuid primary key default gen_random_uuid(),
+  key_hash      text unique,                -- legacy anonymous device key (unused since accounts)
+  password_hash text,                       -- scrypt "salt:hash" (hex)
+  nickname_key  text unique,                -- lower(nickname), the login name; null for legacy users
+  created_at    timestamptz not null default now()
+);
+-- Upgrade path for databases created before accounts existed.
+alter table users alter column key_hash drop not null;
+alter table users add column if not exists password_hash text;
+alter table users add column if not exists nickname_key text unique;
+
+-- One row per signed-in device; signing out deletes the row.
+create table if not exists sessions (
+  token_hash text primary key,              -- sha256 of the bearer token the phone holds
+  user_id    uuid not null references users on delete cascade,
   created_at timestamptz not null default now()
 );
 
