@@ -12,6 +12,8 @@ create table if not exists users (
 alter table users alter column key_hash drop not null;
 alter table users add column if not exists password_hash text;
 alter table users add column if not exists nickname_key text unique;
+-- Demo mode only: a simulated nearby player owned by (and deleted with) a real user. Never a login.
+alter table users add column if not exists demo_owner uuid references users on delete cascade;
 
 -- One row per signed-in device; signing out deletes the row.
 create table if not exists sessions (
@@ -67,6 +69,21 @@ create table if not exists blocks (
   created_at timestamptz not null default now(),
   primary key (blocker, blocked)
 );
+
+-- A wearable is linked to one account by the token its firmware provides (never the phone's BLE id).
+create table if not exists wearables (
+  id             bigint generated always as identity primary key,
+  user_id        uuid not null unique references users on delete cascade,
+  wearable_token text not null unique,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+
+-- Quest progress lives on the match (the two people share one quest).
+alter table matches add column if not exists quest_id int references quests;
+alter table matches add column if not exists quest_status text check (quest_status in ('selected','active','completed'));
+alter table matches add column if not exists quest_started_at timestamptz;
+alter table matches add column if not exists quest_completed_at timestamptz;
 
 -- Time-series: every MATCH signal the wearables report (RSSI log).
 create table if not exists proximity_events (

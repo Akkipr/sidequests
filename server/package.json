@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node score.js",
+    "test": "node --test test/*.test.js",
     "start": "NODE_EXTRA_CA_CERTS=timescale-ca.pem node index.js",
     "db:init": "NODE_EXTRA_CA_CERTS=timescale-ca.pem node -e \"require('dotenv').config(); const {Pool}=require('pg'); const db=new Pool({connectionString:process.env.DATABASE_URL}); db.query(require('fs').readFileSync('../db/schema.sql','utf8')).then(()=>console.log('schema ok'),e=>{console.error(e.message);process.exitCode=1}).finally(()=>db.end())\""
   },

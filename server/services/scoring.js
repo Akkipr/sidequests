@@ -39,14 +39,3 @@ function score(a, b) {
 }
 
 module.exports = { score, THRESHOLD };
-
-if (require.main === module) {
-  const assert = require('assert');
-  const p = (o) => ({ archetypes: [], answers: {}, wants: [], budget: 'low', status: 'open', ...o });
-  const twin = p({ archetypes: ['foodie', 'explorer'], answers: { foodie_spicy: 'yes', explorer_plan: 'wing' }, status: 'food' });
-  assert(score(twin, twin).score >= 90, 'identical profiles should score high');
-  assert(score(p({ archetypes: ['foodie'] }), p({ archetypes: ['active'] })).score < THRESHOLD, 'nothing shared should not match');
-  assert.equal(score(p({ archetypes: ['foodie'], wants: ['active'] }), p({ archetypes: ['foodie'] })), null, 'unmet preference blocks');
-  assert.equal(score(p({ archetypes: ['foodie'] }), p({ archetypes: ['foodie'], status: 'off' })), null, 'off is never matched');
-  console.log('score ok:', score(twin, twin));
-}

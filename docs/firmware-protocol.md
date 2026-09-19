@@ -1,0 +1,92 @@
+# Wearable firmware protocol
+
+> **Status: specification only.** The ESP32 firmware is **not in this repository**. This document describes what
+> the phone app (`mobile/src/services/ble.ts`) and the server (`POST /signal`, `POST /wearables/link`) expect,
+> so the firmware can be updated to match. Nothing here has been verified against real hardware.
+
+## Why this changed
+
+The original firmware sends a bare `MATCH` when two wearables are close. It carries no identity, so the server
+could only pair you with *whoever else reported a signal in the last 20 seconds*. Two separate pairs meeting at
+once could be cross-matched. Exact pairing needs each wearable to identify itself, and the phone to report
+**which** wearable it saw.
+
+## BLE service
+
+The wearable is a BLE peripheral that a phone connects to (GATT). It advertises the name `PassingStranger` and
+the service UUID below.
+
+| Item | UUID | Properties | Value |
+|---|---|---|---|
+| Service | `abcd1234-1234-1234-1234-abcdef123456` | | |
+| **Match characteristic** | `abcd1234-1234-1234-1234-abcdef123457` | read, **notify** | UTF-8 message (see below) |
+| **Token characteristic** *(new)* | `abcd1234-1234-1234-1234-abcdef123458` | read | UTF-8 string: this wearable's own token |
+
+Values are written as raw UTF-8 bytes; the phone base64-decodes them and trims whitespace.
+
+## The wearable token
+
+* A string matching `^[A-Za-z0-9_.-]{4,128}$`. It **must not contain `:`**, because `:` separates fields in `NEAR`.
+* **Unique per wearable and stable** (e.g. derived from the chip's factory ID). Use at least 8 random-looking
+  characters; short tokens are guessable.
+* The wearable serves it on the Token characteristic (read). It is also what the wearable announces to nearby
+  wearables so that they can report it (see below).
+* **It is not the phone's BLE device identifier.** iOS randomises those and they change between phones and
+  reinstalls; the server never stores them.
+
+### How it gets linked to an account
+
+1. The phone connects to its own wearable and reads the Token characteristic.
+2. The phone calls `POST /wearables/link` with `{ "wearableToken": "<token>" }` (authenticated).
+3. The server stores one wearable per account (`wearables` table). Linking a token that another account holds
+   moves it to the latest account ("last link wins").
+
+## Messages (Match characteristic, notify)
+
+| Message | Meaning |
+|---|---|
+| `NEAR:<peer-token>:<rssi>` | *New.* This wearable detected another wearable. `<peer-token>` is the **other** wearable's token; `<rssi>` is a signed integer in dBm (e.g. `NEAR:x7Kp2mQ9:-57`). |
+| `IDLE` | Nothing is nearby any more. |
+| `MATCH` | **LEGACY.** "Someone is near", no identity. Still parsed by the app, but see below. |
+
+Guidance for firmware:
+
+* Send `NEAR` once when a peer first comes into range, and again only if the peer leaves and returns (or at most
+  every ~10 s). The app rate-limits per token, but don't rely on that.
+* Send `IDLE` when the last peer is lost.
+* How the wearable learns a peer's token is up to the firmware (e.g. the token in the peer's advertisement, or a
+  short exchange when they meet). It must not require the phone.
+
+## What the phone sends the server
+
+On `NEAR:<peer-token>:<rssi>`:
+
+```http
+POST /signal
+Authorization: Bearer <session token>
+{ "detectedWearableToken": "<peer-token>", "rssi": -57, "timestamp": 1790000000 }
+```
+
+The server then, for that exact pair only: resolves the token to a user → checks blocks → checks both people are
+discoverable → scores them → creates (or returns) the match. It never looks at anyone else's signals. A match for
+the same pair is not created again within one hour.
+
+Response: `{ "matchId": 12 }`, `{ "matchId": null }`, or `{ "matchId": null, "reason": "unknown_wearable" }` if the
+token isn't linked to any account.
+
+## Legacy `MATCH` signals
+
+`MATCH` sends `POST /signal` with an empty body, which the server pairs by **time window** (anyone who reported in
+the last 20 s). This is **legacy / demo-only**: the server accepts it **only when `DEMO_MODE=true`** and otherwise
+replies `403 legacy signals are disabled`. It exists so the current firmware keeps working for demos until the
+firmware is updated. Do not rely on it in a real deployment.
+
+## Known limits and recommended hardening
+
+* **Tokens are effectively public to anyone nearby**, because peers must learn them. Since linking is "last link
+  wins", someone who reads your token could link it to their own account and receive your matches. Recommended:
+  give each wearable a *public broadcast ID* (what `NEAR` carries) and a separate *secret link token* (what the
+  Token characteristic returns, only readable while connected), and link with the secret. The current server takes
+  a single token, as specified; splitting them is a small change on both sides.
+* `timestamp` is accepted but not enforced. Add a freshness window if replayed signals become a concern.
+* Nothing here is encrypted beyond standard BLE link security.
