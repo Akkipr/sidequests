@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "SideQuests",
+    "slug": "sidequests",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.sidequests.app1"
+    },
+    "android": {
+      "package": "com.sidequests.app1",
+      "adaptiveIcon": {
+        "backgroundColor": "#1b1b2f",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": [],
+          "bluetoothAlwaysPermission": "SideQuests connects to your wearable to know when a compatible person is nearby."
+        }
+      ],
+      "expo-font"
+    ]
+  }
+}
