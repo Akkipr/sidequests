@@ -105,6 +105,8 @@ export const linkWearable = (wearableToken: string) => post<{ ok: true }>('/wear
 
 // ---- matches ----
 export const getMatch = (id: number) => get<MatchView>(`/matches/${id}`);
+// A match the partner's signal created: our own wearable may never have reported them.
+export const getCurrentMatch = () => get<MatchView | null>('/matches/current');
 export const respondToMatch = (id: number, wave: boolean) => post<MatchView>(`/matches/${id}/respond`, { wave });
 export const blockMatch = (id: number) => post<{ ok: true }>(`/matches/${id}/block`, { reason: 'user report' });
 

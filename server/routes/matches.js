@@ -4,6 +4,8 @@ const { httpError } = require('../errors');
 
 const router = Router();
 
+// Before /matches/:id, or 'current' would be read as an id.
+router.get('/matches/current', async (req, res) => res.json(await matching.current(req.uid)));
 router.get('/matches/:id', async (req, res) => res.json(await matching.get(req.uid, req.params.id)));
 router.post('/matches/:id/respond', async (req, res) => res.json(await matching.respond(req.uid, req.params.id, !!req.body.wave)));
 router.post('/matches/:id/block', async (req, res) => {

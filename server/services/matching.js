@@ -95,6 +95,13 @@ function createMatching({ profiles, matches, wearables, quests, config }) {
 
   const get = async (uid, id) => view(uid, await load(uid, id));
 
+  // Both phones must end up in the match, but only the one whose signal created it gets the id back.
+  // The other polls this while scanning.
+  async function current(uid) {
+    const m = await matches.currentFor(uid, config.CURRENT_MATCH_MINUTES);
+    return m ? view(uid, m) : null;
+  }
+
   // A wave can be withdrawn (wave=false) until the match resolves; once revealed or declined it is final.
   const respond = (uid, id, wave) => withSpan('match.respond', { 'match.wave': !!wave }, async (span) => {
     const m = await load(uid, id);
@@ -111,7 +118,7 @@ function createMatching({ profiles, matches, wearables, quests, config }) {
     await matches.declineFor(m.id, uid);
   }
 
-  return { tryMatch, handleSignal, get, respond, block, statusOf };
+  return { tryMatch, handleSignal, get, current, respond, block, statusOf };
 }
 
 module.exports = { createMatching };

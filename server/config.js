@@ -8,6 +8,7 @@ module.exports = {
   MIN_PASSWORD: 8,
   DEMO_WAVE_DELAY_MS: 6000,
   LEGACY_WINDOW_SECONDS: 20,
+  CURRENT_MATCH_MINUTES: 10, // how far back 'do I have a match?' looks
   // WAT2DO event import. All off / empty by default; read at call time like demoMode.
   // A too-short secret, or the placeholder from .env.example, counts as "not configured" so the endpoint stays locked.
   adminSecret: () => {

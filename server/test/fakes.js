@@ -31,6 +31,8 @@ function makeWorld({ demo = false } = {}) {
         quest_id: null, quest_status: null, quest_started_at: null, quest_completed_at: null });
       return id;
     },
+    currentFor: async (uid) => [...w.matches].reverse().find(m =>
+      (m.user_a === uid || m.user_b === uid) && m.a_response !== false && m.b_response !== false),
     getFor: async (uid, id) => w.matches.find(m => m.id === Number(id) && (m.user_a === uid || m.user_b === uid)),
     setResponse: async (id, s, v) => { w.matches.find(m => m.id === id)[`${s}_response`] = v; },
     block: async (blocker, blocked) => { w.blocks.push({ blocker, blocked }); },

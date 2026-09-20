@@ -74,3 +74,13 @@ exports.runsFor = (uid) =>
      left join profiles p on p.user_id = case when m.user_a = $1 then m.user_b else m.user_a end
      where $1 in (m.user_a, m.user_b) and m.quest_status is not null
      order by coalesce(m.quest_completed_at, m.quest_started_at, m.created_at) desc`, [uid]);
+
+// The newest match this person still has something to do with: nobody has said no, and it is recent.
+// Lets the OTHER phone find a match created by its partner's signal, instead of only ever learning
+// about matches its own signal created.
+exports.currentFor = (uid, minutes) =>
+  first(q(`select * from matches
+           where $1 in (user_a, user_b)
+             and created_at > now() - make_interval(mins => $2)
+             and a_response is distinct from false and b_response is distinct from false
+           order by id desc limit 1`, [uid, minutes]));

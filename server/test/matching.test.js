@@ -196,3 +196,23 @@ test('you cannot read or act on someone else\'s match', async () => {
   await assert.rejects(matching.respond('u-carol', matchId, true), { status: 404 });
   await assert.rejects(matching.get('u-alice', 'not-a-number'), { status: 404 });
 });
+
+test('the partner finds the match their own signal never created', async () => {
+  const { matching, near } = setup();
+  const { matchId } = await near('u-alice', 'tok-bob'); // only Alice's wearable reported
+  assert.equal((await matching.current('u-bob'))?.id, matchId);
+  assert.equal((await matching.current('u-alice'))?.id, matchId);
+});
+
+test('a declined match is not handed back as current', async () => {
+  const { matching, near } = setup();
+  const { matchId } = await near('u-alice', 'tok-bob');
+  await matching.respond('u-bob', matchId, false);
+  assert.equal(await matching.current('u-bob'), null);
+  assert.equal(await matching.current('u-alice'), null);
+});
+
+test('nobody with no match gets one', async () => {
+  const { matching } = setup();
+  assert.equal(await matching.current('u-carol'), null);
+});

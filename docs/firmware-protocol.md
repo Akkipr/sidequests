@@ -1,8 +1,8 @@
 # Wearable firmware protocol
 
-> **Status: specification only.** The ESP32 firmware is **not in this repository**. This document describes what
-> the phone app (`mobile/src/services/ble.ts`) and the server (`POST /signal`, `POST /wearables/link`) expect,
-> so the firmware can be updated to match. Nothing here has been verified against real hardware.
+> **Status: implemented.** The firmware lives in `firmware/esp32_wearable/` (wearable) and
+> `firmware/uno_display/` (LCD display). It implements everything below, but has **not yet been verified on
+> real hardware** — the RSSI thresholds in particular need tuning on the actual boards.
 
 ## Why this changed
 
@@ -54,8 +54,18 @@ Guidance for firmware:
 * Send `NEAR` once when a peer first comes into range, and again only if the peer leaves and returns (or at most
   every ~10 s). The app rate-limits per token, but don't rely on that.
 * Send `IDLE` when the last peer is lost.
-* How the wearable learns a peer's token is up to the firmware (e.g. the token in the peer's advertisement, or a
-  short exchange when they meet). It must not require the phone.
+* How the wearable learns a peer's token is up to the firmware. The ESP32 firmware here puts it in the
+  **advertisement**, so no connection between wearables is needed:
+
+  | Part | Bytes | Value |
+  |---|---|---|
+  | Advert: flags | 3 | `0x06` (LE general discoverable) |
+  | Advert: manufacturer data | 21 | `FF FF` (unregistered company id) + `SQ1` (magic) + the token |
+  | Scan response: complete local name | 17 | `PassingStranger`, which is how the phone finds its wearable |
+
+  The token is `PS` + the chip's 6-byte MAC in hex (e.g. `PSA4CF12B39D01`): unique per board, stable across
+  reboots, and never contains `:`. Advertising is restarted when a phone connects, because the ESP32 stops it
+  by default — otherwise a wearable would go invisible to its peers exactly while its owner's phone is linked.
 
 ## What the phone sends the server
 

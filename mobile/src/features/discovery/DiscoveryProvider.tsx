@@ -18,6 +18,7 @@ const WAVE_TIMEOUT_MS = 120000;  // give up waiting after 2 minutes
 const NEAR_COOLDOWN_MS = 10000;  // wearables may repeat NEAR; don't hit the server for the same peer every second
 const LEGACY_TRIES = 7;          // LEGACY MATCH signals: keep asking for ~20s while the other phone reports
 const LEGACY_GAP_MS = 3000;
+const CURRENT_MATCH_MS = 5000;  // only one of the two wearables may report; the other polls for the match
 
 export type Discovery = {
   model: DiscoveryModel;
@@ -139,7 +140,14 @@ export function DiscoveryProvider({ children }: { children: ReactNode }) {
       }
     };
     const off = onWearableMessage(m => { void onMessage(m); });
-    return () => { active = false; off(); };
+
+    // Matching is one-sided: the server hands the id only to the phone whose signal created the match.
+    // Without this, the partner sees nothing unless their own wearable happens to report too.
+    const poll = setInterval(() => {
+      api.getCurrentMatch().then(m => { if (m) void surface(m.id); }, () => {});
+    }, CURRENT_MATCH_MS);
+
+    return () => { active = false; off(); clearInterval(poll); };
   }, [listening]);
 
   // ---- 4. Waiting for the other wave: poll, with a timeout. Only exists in waiting_for_wave. ----
