@@ -38,3 +38,18 @@ const NUMBER = /\/\d+(?=\/|$)/g;
 export function routeName(path: string): string {
   return path.replace(/[?#].*$/, '').replace(UUID, '/:id').replace(NUMBER, '/:id');
 }
+
+// ---- logs: same rules as the server. Free-form text can carry anything, so nothing sensitive may leave the phone. ----
+const SENSITIVE_KEY = /pass(word|wd)?|token|secret|authorization|cookie|nickname|email|session|bearer|api[-_]?key/i;
+const TOKEN_LIKE = /\b[0-9a-f]{32,}\b|\bBearer\s+\S+|\beyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{5,}/gi;
+const MAX_LOG_TEXT = 500;
+const cleanText = (v: unknown) => (typeof v === 'string' ? v.replace(TOKEN_LIKE, '[redacted]').slice(0, MAX_LOG_TEXT) : v);
+
+/** Drops sensitive attributes, redacts token-shaped text and caps length. Runs on every log before it is sent. */
+export function scrubLog<L extends { message: unknown; attributes?: Record<string, unknown> }>(log: L): L {
+  const attributes: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(log.attributes ?? {})) {
+    if (!SENSITIVE_KEY.test(key)) attributes[key] = cleanText(value);
+  }
+  return { ...log, message: cleanText(String(log.message)), attributes };
+}

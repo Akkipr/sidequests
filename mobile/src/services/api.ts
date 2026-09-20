@@ -4,7 +4,7 @@ import type {
   SignupInput, Status,
 } from '../types/api';
 import { routeName } from './monitoringFilters';
-import { traced } from './monitoring';
+import { appLog, traced } from './monitoring';
 import { storage } from './storage';
 
 // ---- session token ----
@@ -56,6 +56,7 @@ async function rawRequest<T>(method: string, path: string, body?: object): Promi
     body: body && JSON.stringify(body),
   });
   if (r.status === 401) {
+    appLog.warn('session expired');
     await setToken(null);
     authLost();
     throw new AuthError('Session expired');
@@ -76,9 +77,11 @@ async function authenticate(path: '/signup' | '/login', body: object): Promise<P
   }));
   if (!r.ok) {
     const { error } = (await r.json().catch(() => ({ error: `${path} failed: ${r.status}` }))) as { error: string };
+    appLog.warn(path === '/signup' ? 'sign-up failed' : 'sign-in failed', { 'http.status': r.status });
     throw new ApiError(error, r.status);
   }
   await setToken(((await r.json()) as { token: string }).token);
+  appLog.info(path === '/signup' ? 'signed up' : 'signed in');
   return getProfile();
 }
 export const signup = (input: SignupInput) => authenticate('/signup', input);
@@ -88,6 +91,7 @@ export const login = (nickname: string, password: string) => authenticate('/logi
 export async function logout() {
   await post('/logout').catch(() => {});
   await setToken(null);
+  appLog.info('signed out');
 }
 
 // ---- profile ----

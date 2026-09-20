@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dropExpected, isExpectedError, parseSampleRate, releaseName, routeName } from './monitoringFilters.ts';
+import { dropExpected, isExpectedError, parseSampleRate, releaseName, routeName, scrubLog } from './monitoringFilters.ts';
 
 class AuthError extends Error {
   name = 'AuthError';
@@ -50,4 +50,26 @@ test('span names use the route pattern, never a real id or query string', () => 
   assert.equal(routeName('/blocks/0a496dfe-209a-4154-b36e-8598b52009ba'), '/blocks/:id'); // a uuid that starts with a digit
   assert.equal(routeName('/quests'), '/quests');
   assert.equal(routeName('/profile'), '/profile');
+});
+
+test('logs drop sensitive attributes whatever their spelling', () => {
+  const out = scrubLog({ message: 'x', attributes: {
+    password: 'p', Password: 'p', token: 't', sessionId: 's', Authorization: 'a', nickname: 'alice', email: 'a@b.c', apiKey: 'k',
+    intent: 'food', 'match.status': 'pending', ok: true, count: 3,
+  } });
+  assert.deepEqual(out.attributes, { intent: 'food', 'match.status': 'pending', ok: true, count: 3 });
+});
+
+test('logs redact token-shaped text and cap long values', () => {
+  const token = 'a1b2c3d4'.repeat(8);
+  const out = scrubLog({ message: `sent ${token}`, attributes: { detail: `Bearer ${token}`, big: 'x'.repeat(5000) } });
+  assert.equal(out.message, 'sent [redacted]');
+  assert.equal(out.attributes?.detail, '[redacted]');
+  assert.equal((out.attributes?.big as string).length, 500);
+  assert.ok(!JSON.stringify(out).includes(token));
+});
+
+test('logs without attributes, and other fields of the log, are left alone', () => {
+  assert.deepEqual(scrubLog({ message: 'hello' }), { message: 'hello', attributes: {} });
+  assert.equal((scrubLog({ message: 'm', level: 'warn' } as { message: string; level: string })).level, 'warn');
 });

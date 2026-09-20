@@ -10,7 +10,7 @@ import {
   DiscoveryModel, discoveryReducer, inMatchFlow, initialModel, isListening, isPolling, serverStatus,
 } from '../../state/discoveryMachine';
 import type { Intent, QuestRun } from '../../types/api';
-import { traced } from '../../services/monitoring';
+import { appLog, traced } from '../../services/monitoring';
 import { useSession } from '../auth/SessionProvider';
 
 const POLL_MS = 3000;            // how often to ask whether the other person waved back
@@ -92,8 +92,10 @@ export function DiscoveryProvider({ children }: { children: ReactNode }) {
       const { token } = await inflight.current;
       // Exact-peer pairing needs the server to know which account owns this wearable.
       if (token) await api.linkWearable(token).catch((e: unknown) => console.warn('wearable link failed', e));
+      appLog.info('wearable linked', { 'wearable.has_token': !!token });
       send({ type: 'WEARABLE_LINKED' });
     } catch (e) {
+      appLog.warn('wearable connect failed'); // the reason stays on the phone, shown to the player
       send({ type: 'WEARABLE_FAILED', message: api.errorMessage(e) });
     }
   }
@@ -184,11 +186,12 @@ export function DiscoveryProvider({ children }: { children: ReactNode }) {
     };
 
     return {
-      start: (intent: Intent) => send({ type: 'START', intent }),
+      start: (intent: Intent) => { appLog.info('discovery started', { intent }); send({ type: 'START', intent }); },
       changeIntent: (intent: Intent) => send({ type: 'CHANGE_INTENT', intent }),
       goPrivate: () => {
         const { state, match } = cur();
         if (state === 'waiting_for_wave' && match) api.respondToMatch(match.id, false).catch(() => {}); // withdraw the wave
+        appLog.info('discovery stopped');
         send({ type: 'GO_PRIVATE' });
       },
       connectWearable: runConnect,
@@ -202,10 +205,11 @@ export function DiscoveryProvider({ children }: { children: ReactNode }) {
         if (!m || cur().state !== 'candidate_detected') return;
         try {
           const match = await api.respondToMatch(m.id, true);
+          appLog.info('wave sent', { 'match.status': match.status });
           send(match.status === 'pending' ? { type: 'WAVE_SENT', match } : { type: 'MATCH_UPDATED', match });
         } catch (e) { fail(e); }
       },
-      notNow: async () => { try { await closeMatch(true); } catch (e) { fail(e); } },
+      notNow: async () => { try { await closeMatch(true); appLog.info('match declined'); } catch (e) { fail(e); } },
       cancelWave: async () => { try { await closeMatch(true); } catch (e) { fail(e); } },
       leaveMatch: () => send({ type: 'MATCH_CLOSED' }),
       reportAndBlock: async () => {
@@ -221,6 +225,7 @@ export function DiscoveryProvider({ children }: { children: ReactNode }) {
         if (id === undefined) return;
         try {
           await api.selectQuest(id, questId);
+          appLog.info('quest chosen');
           send({ type: 'QUEST_SELECTED', matchId: id, questId });
           bump();
         } catch (e) { fail(e); }
@@ -230,6 +235,7 @@ export function DiscoveryProvider({ children }: { children: ReactNode }) {
         if (!q) return;
         try {
           await api.startQuest(q.matchId);
+          appLog.info('quest started');
           send({ type: 'QUEST_STARTED', ...q });
           bump();
         } catch (e) { fail(e); }
@@ -238,6 +244,7 @@ export function DiscoveryProvider({ children }: { children: ReactNode }) {
       startRun: async (run: QuestRun) => {
         try {
           await api.startQuest(run.matchId);
+          appLog.info('quest started');
           send({ type: 'QUEST_STARTED', matchId: run.matchId, questId: run.quest.id });
           bump();
           return true;
@@ -258,6 +265,7 @@ export function DiscoveryProvider({ children }: { children: ReactNode }) {
       completeRun: async (run: QuestRun) => {
         try {
           await api.completeQuest(run.matchId); // safe to repeat: the server pays out once
+          appLog.info('quest completed');
           send({ type: 'QUEST_COMPLETED', matchId: run.matchId });
           bump();
           await refreshProfile(); // new points total
@@ -269,6 +277,7 @@ export function DiscoveryProvider({ children }: { children: ReactNode }) {
         try {
           const { matchId: id } = await api.simulateNearby();
           seen.current.add(id);
+          appLog.info('simulated nearby player (demo)');
           send({ type: 'MATCH_DETECTED', match: await api.getMatch(id) });
         } catch (e) { fail(e); }
       },

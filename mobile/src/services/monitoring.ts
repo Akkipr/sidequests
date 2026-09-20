@@ -2,7 +2,7 @@ import * as Sentry from '@sentry/react-native';
 import type { NavigationContainerRefWithCurrent, ParamListBase } from '@react-navigation/native';
 import { expo } from '../../app.json';
 import { API_URL, SENTRY_DSN, SENTRY_RELEASE, SENTRY_TRACES_SAMPLE_RATE_RAW } from '../config';
-import { dropExpected, parseSampleRate, releaseName } from './monitoringFilters';
+import { dropExpected, parseSampleRate, releaseName, scrubLog } from './monitoringFilters';
 
 // Crash and error reporting plus release health and performance. Off unless EXPO_PUBLIC_SENTRY_DSN is set.
 //
@@ -37,7 +37,11 @@ export function initMonitoring() {
 
     // Performance / Apdex. Every session is traced while developing so data shows up quickly; production keeps 20%.
     tracesSampleRate: parseSampleRate(SENTRY_TRACES_SAMPLE_RATE_RAW, __DEV__ ? 1 : 0.2),
-    integrations: [navigationIntegration],
+    // Logs: JavaScript only (no native OS logs), and only warnings and errors from the console. Every log is scrubbed.
+    enableLogs: true,
+    logsOrigin: 'js',
+    beforeSendLog: scrubLog,
+    integrations: [navigationIntegration, Sentry.consoleLoggingIntegration({ levels: ['warn', 'error'] })],
     // Send trace headers to OUR API only, so an action in the app and the server request it caused show up as one trace.
     // (The headers carry ids and the release name, nothing about the player.)
     tracePropagationTargets: [API_URL],
@@ -56,6 +60,13 @@ export function registerNavigation(container: NavigationContainerRefWithCurrent<
 export function traced<T>(name: string, fn: () => Promise<T>): Promise<T> {
   return Sentry.startSpan({ name, op: 'app.action' }, fn);
 }
+
+// Deliberate usage logs: fixed messages and non-identifying attributes (an intent, a status), never names, ids or tokens.
+// Safe to call when Sentry is off.
+export const appLog = {
+  info: (message: string, attributes?: Record<string, string | number | boolean>) => Sentry.logger.info(message, attributes),
+  warn: (message: string, attributes?: Record<string, string | number | boolean>) => Sentry.logger.warn(message, attributes),
+};
 
 // Wraps the root component so render errors are caught and reported.
 export const withMonitoring = Sentry.wrap;
