@@ -206,6 +206,8 @@ sidequests/
 │   │                        wat2do (scraper + parser), eventImport, eventClassifier, importScheduler
 │   ├── repositories/        All SQL
 │   ├── middleware/          Auth (sessions) and error handling
+│   ├── telemetry.js         Sentry options, privacy scrub, spans and metrics (instrument.js loads it first)
+│   ├── scripts/demo-traffic.js   Synthetic load for a demo dashboard (tagged synthetic:true)
 │   ├── container.js         Wires repositories into services
 │   ├── test/                Unit tests (in-memory fakes, no database)
 │   ├── timescale-ca.pem     CA cert for the DB connection
@@ -262,5 +264,5 @@ The iOS simulator has no Bluetooth, so the real wearable features need a physica
 - **The WAT2DO importer depends on a third party's page markup,** which can change without notice (it then fails loudly). WAT2DO publishes no terms, so ask them before relying on it beyond a demo. The event pictures are loaded from their servers.
 - **No password recovery, and no rate limiting on login.**
 - **`timestamp` on a signal is accepted but not enforced.**
-- **Sentry is app-only and needs a native rebuild.** The server isn't instrumented, and uploading source maps needs a `SENTRY_AUTH_TOKEN` at release-build time (see the README).
+- **Sentry:** the app needs a native rebuild and uploading source maps needs a `SENTRY_AUTH_TOKEN` at release-build time. The API reports to the same Sentry project as the app (`SENTRY_DSN` in `server/.env`), tagged `component:api`, and the load script's traffic is synthetic and tagged as such (see the README).
 - **No linter is configured,** and the mobile UI has no automated tests beyond the state machine and message parser.

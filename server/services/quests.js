@@ -1,5 +1,6 @@
 const { httpError } = require('../errors');
 const { toQuestDto } = require('./questDto');
+const { withSpan, count } = require('../telemetry');
 
 const shape = (r) => ({
   matchId: Number(r.match_id),
@@ -24,7 +25,7 @@ function createQuests({ matches, quests, profiles, config }) {
     return shape(runs.find(r => Number(r.match_id) === Number(matchId)));
   };
 
-  async function select(uid, matchId, questId) {
+  const select = (uid, matchId, questId) => withSpan('quest.select', {}, async (span) => {
     const m = await revealedMatch(uid, matchId);
     if (!m.quest_ids.includes(questId)) throw httpError(400, 'that quest was not offered for this match');
     if (m.quest_status === 'active' || m.quest_status === 'completed') {
@@ -32,10 +33,12 @@ function createQuests({ matches, quests, profiles, config }) {
       throw httpError(409, 'quest already started');
     }
     await matches.selectQuest(m.id, questId); // swapping while still 'selected' is allowed ("suggest another")
-    return { run: await runOf(uid, m.id) };
-  }
+    const run = await runOf(uid, m.id);
+    span.setAttribute('quest.source', run.quest.source ?? 'seeded'); // imported event or one of ours
+    return { run };
+  });
 
-  async function start(uid, matchId) {
+  const start = (uid, matchId) => withSpan('quest.start', {}, async (span) => {
     const m = await revealedMatch(uid, matchId);
     if (!m.quest_status) throw httpError(409, 'pick a quest first');
     if (m.quest_status === 'selected') {
@@ -44,15 +47,25 @@ function createQuests({ matches, quests, profiles, config }) {
         throw httpError(409, 'finish your current quest first');
       await matches.markStarted(m.id);
     }
-    return { run: await runOf(uid, m.id) }; // already active or completed: unchanged
-  }
+    const run = await runOf(uid, m.id); // already active or completed: unchanged
+    span.setAttribute('quest.status', run.status);
+    return { run };
+  });
 
-  async function complete(uid, matchId) {
+  const complete = (uid, matchId) => withSpan('quest.complete', {}, async (span) => {
     const m = await revealedMatch(uid, matchId);
     if (m.quest_status === 'selected' || !m.quest_status) throw httpError(409, 'start the quest first');
     const awarded = m.quest_status === 'active' ? await matches.completeAndAward(m.id, config.QUEST_POINTS) : false;
-    return { run: await runOf(uid, m.id), awarded };
-  }
+    const run = await runOf(uid, m.id);
+    const source = run.quest.source ?? 'seeded';
+    span.setAttribute('quest.awarded', awarded);
+    span.setAttribute('quest.source', source);
+    if (awarded) {
+      count('quests.completed', 1, { source });
+      count('quest.points_awarded', config.QUEST_POINTS * 2); // both players are paid
+    }
+    return { run, awarded };
+  });
 
   // Everything the Quests tab needs in one call.
   async function overview(uid) {

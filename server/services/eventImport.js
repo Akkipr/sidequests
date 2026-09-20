@@ -1,6 +1,7 @@
 const { classifyEvent } = require('./eventClassifier');
 const { httpError } = require('../errors');
 const { TIMEZONE } = require('./wat2do');
+const { withSpan, count } = require('../telemetry');
 
 const DEFAULT_MINUTES = 60;
 const MIN_MINUTES = 15;
@@ -63,13 +64,13 @@ function toQuestRecord(event, classify = classifyEvent) {
 function createEventImporter({ scrape, quests, config, logger = console, now = () => new Date() }) {
   let running = false;
 
-  async function importWat2do({ dryRun = false } = {}) {
+  const importWat2do = ({ dryRun = false } = {}) => withSpan('wat2do.import', { 'import.dry_run': dryRun }, async (span) => {
     if (running) throw httpError(409, 'an import is already running');
     running = true;
     try {
       let scraped;
       try {
-        scraped = await scrape({ baseUrl: config.wat2doBaseUrl(), now: now() });
+        scraped = await withSpan('wat2do.scrape', {}, () => scrape({ baseUrl: config.wat2doBaseUrl(), now: now() }));
       } catch (e) {
         logger.error('wat2do import: could not read the source:', e);
         throw Object.assign(httpError(502, 'import failed'), { cause: e });
@@ -91,7 +92,7 @@ function createEventImporter({ scrape, quests, config, logger = console, now = (
       if (!dryRun && records.length) {
         let results;
         try {
-          results = await quests.upsertExternal(records);
+          results = await withSpan('wat2do.upsert', { 'import.records': records.length }, () => quests.upsertExternal(records));
         } catch (e) {
           logger.error('wat2do import: database error:', e);
           throw Object.assign(httpError(502, 'import failed'), { cause: e });
@@ -102,11 +103,15 @@ function createEventImporter({ scrape, quests, config, logger = console, now = (
           else updated++;
         }
       }
-      return { discovered: scraped.discovered ?? (scraped.events ?? []).length, inserted, updated, skipped, failed };
+      const summary = { discovered: scraped.discovered ?? (scraped.events ?? []).length, inserted, updated, skipped, failed };
+      for (const [k, v] of Object.entries(summary)) span.setAttribute(`import.${k}`, v);
+      count('wat2do.events_inserted', inserted);
+      count('wat2do.events_updated', updated);
+      return summary;
     } finally {
       running = false;
     }
-  }
+  });
 
   return { importWat2do, isRunning: () => running };
 }

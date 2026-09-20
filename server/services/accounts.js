@@ -3,6 +3,7 @@ const { promisify } = require('util');
 const { httpError } = require('../errors');
 const { validateProfile } = require('./validation');
 const { sha } = require('../tokens');
+const { withSpan, count } = require('../telemetry');
 
 const scrypt = promisify(crypto.scrypt);
 
@@ -25,7 +26,7 @@ function createAccounts({ accounts, profiles, tx, config }) {
     return token;
   };
 
-  async function signup(body = {}) {
+  async function doSignup(body = {}) {
     const name = typeof body.nickname === 'string' ? body.nickname.trim().slice(0, 24) : '';
     if (!name) throw httpError(400, 'nickname required');
     const { password } = body;
@@ -45,13 +46,31 @@ function createAccounts({ accounts, profiles, tx, config }) {
     }
   }
 
-  async function login({ nickname, password } = {}) {
+  async function doLogin({ nickname, password } = {}) {
     const u = typeof nickname === 'string' ? await accounts.findLogin(nickname.trim().toLowerCase()) : null;
     const ok = typeof password === 'string' && password.length <= 200
       && await checkPassword(password, u?.password_hash ?? await DUMMY) && !!u;
     if (!ok) throw httpError(401, 'wrong nickname or password');
     return { token: await newSession(u.id) };
   }
+
+  // The spans record only the outcome, never who it was: no nickname or password ever goes into telemetry.
+  const outcomeOf = (e) => (e.status === 409 ? 'taken' : e.status === 401 ? 'bad_credentials' : e.status ? 'rejected' : 'error');
+  const signup = (body) => withSpan('auth.signup', {}, async (span) => {
+    try {
+      const result = await doSignup(body);
+      span.setAttribute('auth.result', 'ok');
+      count('players.signed_up');
+      return result;
+    } catch (e) { span.setAttribute('auth.result', outcomeOf(e)); throw e; }
+  });
+  const login = (body) => withSpan('auth.login', {}, async (span) => {
+    try {
+      const result = await doLogin(body);
+      span.setAttribute('auth.result', 'ok');
+      return result;
+    } catch (e) { span.setAttribute('auth.result', outcomeOf(e)); throw e; }
+  });
 
   async function logout(uid, tokenHash) {
     await accounts.deleteSession(tokenHash);

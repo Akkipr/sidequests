@@ -7,13 +7,15 @@
     "test": "node --test test/*.test.js",
     "start": "NODE_EXTRA_CA_CERTS=timescale-ca.pem node index.js",
     "db:init": "NODE_EXTRA_CA_CERTS=timescale-ca.pem node -e \"require('dotenv').config(); const {Pool}=require('pg'); const db=new Pool({connectionString:process.env.DATABASE_URL}); db.query(require('fs').readFileSync('../db/schema.sql','utf8')).then(()=>console.log('schema ok'),e=>{console.error(e.message);process.exitCode=1}).finally(()=>db.end())\"",
-    "test:db": "RUN_DB_TESTS=true NODE_EXTRA_CA_CERTS=timescale-ca.pem node --no-warnings --test test/importDb.test.js"
+    "test:db": "RUN_DB_TESTS=true NODE_EXTRA_CA_CERTS=timescale-ca.pem node --no-warnings --test test/importDb.test.js",
+    "demo:traffic": "NODE_EXTRA_CA_CERTS=timescale-ca.pem node scripts/demo-traffic.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@sentry/node": "^10.75.0",
     "cheerio": "^1.2.0",
     "dotenv": "^18.0.1",
     "express": "^5.2.1",

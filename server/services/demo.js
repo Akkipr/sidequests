@@ -1,5 +1,6 @@
 const { score } = require('./scoring');
 const { httpError } = require('../errors');
+const { withSpan } = require('../telemetry');
 
 // DEMO MODE ONLY (DEMO_MODE=true). Simulates a nearby player so the whole match -> quest flow works without
 // Bluetooth hardware. The partner is a throwaway user owned by the real player (never a login) and is removed
@@ -8,7 +9,7 @@ const NAMES = ['Juno', 'Pixel', 'Kestrel', 'Mango', 'Sprout', 'Nova'];
 const AVATARS = ['🧙', '🥷', '🧑‍🚀', '🦊', '🐸', '🤖', '👾', '🐱'];
 
 function createDemo({ accounts, profiles, matches, quests, config, schedule = setTimeout }) {
-  async function simulateNearby(uid) {
+  const simulateNearby = (uid) => withSpan('demo.simulate_nearby', {}, async () => {
     if (!config.demoMode()) throw httpError(404, 'not found');
     const me = await profiles.get(uid);
     if (!me) throw httpError(409, 'finish onboarding first');
@@ -34,7 +35,7 @@ function createDemo({ accounts, profiles, matches, quests, config, schedule = se
     const side = partnerId === ua ? 'a' : 'b';
     schedule(() => matches.setResponse(matchId, side, true).catch(console.error), config.DEMO_WAVE_DELAY_MS);
     return { matchId };
-  }
+  });
   return { simulateNearby };
 }
 

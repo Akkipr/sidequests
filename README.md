@@ -58,6 +58,47 @@ need a handful of sessions before they mean anything, and Apdex appears under **
   (`SENTRY_AUTH_TOKEN`, kept out of git). Not configured here, so crashes in release builds show minified JavaScript
   until it is.
 
+### Sentry for the API, and demo traffic
+
+The server reports to Sentry too (`server/telemetry.js`, started first in `server/index.js`), to the **same project as the
+app** (`sydequestshtn`), so a trace that starts on the phone and continues on the API is one trace in one place. Both sides
+tag their events, so the two can be separated again: filter **`component:app`** (the phone) or **`component:api`** (the
+server). The API's release is `sidequests-api@<version>`, distinct from the app's `sidequests@<version>`. Because the project
+is shared, filter by `component` (or environment) when reading **Apdex** and **crash-free** numbers, or server traffic will be
+counted alongside the app's.
+
+```bash
+# server/.env
+SENTRY_DSN=<the same DSN as EXPO_PUBLIC_SENTRY_DSN in mobile/.env>
+SENTRY_ENVIRONMENT=demo        # "development" by default; use "demo" while presenting
+SENTRY_TRACES_SAMPLE_RATE=1    # optional, 0 to 1
+```
+
+- **What it shows:** every request as a trace named by route pattern (`POST /matches/:id/respond`), its database queries,
+  5xx errors, and custom spans and metrics on the flows that matter: `signal.handle`, `match.evaluate` (with the *reason*
+  a signal did or didn't match), `match.respond`, `quest.select/start/complete`, `auth.signup/login`, and the WAT2DO import
+  (`wat2do.import`, `.scrape`, `.upsert`), plus counters for matches created, quests completed, points awarded and players
+  signed up. The app sends trace headers to this API only, so an action on the phone and the request it caused appear as
+  **one trace**.
+- **Privacy:** this SDK version collects request bodies, headers, cookies, query strings, database parameters and stack-frame
+  variables *by default*. All are switched off explicitly, and a scrub strips any query string from URL fields as a backstop.
+  `server/test/telemetry.integration.test.js` runs the real SDK against a real Express app and fails if a password,
+  session token, cookie, query secret or nickname appears in anything that would be sent.
+
+**Generating volume without a crowd** (for a demo dashboard): start the server with `DEMO_MODE=true` and
+`SENTRY_ENVIRONMENT=demo`, then
+
+```bash
+cd server
+npm run demo:traffic -- --players 12 --rounds 3 --concurrency 4
+```
+
+Disposable players sign up, get matched with a simulated player, wave, pick and complete quests, hit the everyday error
+paths, and a few deliberate 500s (`POST /demo/test-error`). About 650 requests in about a minute. **This is synthetic, and it
+says so:** every request is sent with `X-SideQuests-Synthetic`, which the server turns into a `synthetic:true` tag, so you
+can filter it out (or in), and the players are deleted afterwards (`--keep` to leave them). Tell judges it is generated load.
+It refuses to run against a server that isn't in demo mode.
+
 ## WAT2DO event import
 
 SideQuests can suggest real University of Waterloo events from [wat2do.ca](https://wat2do.ca) as side-quests.

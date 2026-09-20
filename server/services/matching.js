@@ -2,31 +2,36 @@ const { score, THRESHOLD } = require('./scoring');
 const { httpError } = require('../errors');
 const { validateWearableToken } = require('./validation');
 const { toQuestDto } = require('./questDto');
+const { withSpan, count, distribution } = require('../telemetry');
 
 // Orchestrates proximity signals -> matches. Repositories are injected so this is testable without a database.
 function createMatching({ profiles, matches, wearables, quests, config }) {
-  // Decide whether this exact pair may match and return the match id (creating it if needed).
-  async function tryMatch(me, peer) {
-    if (me === peer) return null;
+  // Decide whether this exact pair may match and return the match id (creating it if needed). The span records the
+  // outcome so the dashboard shows why signals did or didn't turn into matches.
+  const tryMatch = (me, peer) => withSpan('match.evaluate', {}, async (span) => {
+    const done = (outcome, id = null) => { span.setAttribute('match.outcome', outcome); return id; };
+    if (me === peer) return done('own_wearable');
     const [ua, ub] = [me, peer].sort();
 
     // Blocks and discovery come first so they also stop an existing match from being handed back.
-    if (await matches.isBlocked(ua, ub)) return null;
+    if (await matches.isBlocked(ua, ub)) return done('blocked');
     const [a, b] = await Promise.all([profiles.get(ua), profiles.get(ub)]);
-    if (!a || !b || a.status === 'off' || b.status === 'off') return null;
+    if (!a || !b || a.status === 'off' || b.status === 'off') return done('not_discoverable');
 
     const existing = await matches.findRecent(ua, ub); // one-hour duplicate protection
-    if (existing) return existing.id;
+    if (existing) return done('existing', existing.id);
 
     const s = score(a, b);
-    if (!s || s.score < THRESHOLD) return null;
+    if (!s || s.score < THRESHOLD) return done('below_threshold');
 
     const freeOnly = a.budget === 'free' || b.budget === 'free';
     const picks = await quests.pickForMatch(s.shared, freeOnly);
     await matches.insert({ ua, ub, score: s.score, reason: s.reason, shared: s.shared, questIds: picks.map(x => x.id) });
+    count('matches.created');
+    distribution('match.score', s.score, 'none');
     // Both phones may insert at once; everyone converges on the oldest row.
-    return (await matches.findRecent(ua, ub)).id;
-  }
+    return done('created', (await matches.findRecent(ua, ub)).id);
+  });
 
   // Exact-peer pairing: the phone reports the wearable token it detected, so only that pair is scored.
   async function fromWearable(uid, body) {
@@ -50,8 +55,14 @@ function createMatching({ profiles, matches, wearables, quests, config }) {
     return { matchId: null };
   }
 
-  const handleSignal = (uid, body = {}) =>
-    body.detectedWearableToken === undefined ? legacyTimeWindow(uid, body) : fromWearable(uid, body);
+  const handleSignal = (uid, body = {}) => {
+    const legacy = body.detectedWearableToken === undefined;
+    return withSpan('signal.handle', { 'signal.kind': legacy ? 'legacy' : 'exact_peer' }, async (span) => {
+      const result = await (legacy ? legacyTimeWindow(uid, body) : fromWearable(uid, body));
+      span.setAttribute('signal.matched', !!result.matchId);
+      return result;
+    });
+  };
 
   // ---- match views and actions ----
 
@@ -84,11 +95,13 @@ function createMatching({ profiles, matches, wearables, quests, config }) {
   const get = async (uid, id) => view(uid, await load(uid, id));
 
   // A wave can be withdrawn (wave=false) until the match resolves; once revealed or declined it is final.
-  async function respond(uid, id, wave) {
+  const respond = (uid, id, wave) => withSpan('match.respond', { 'match.wave': !!wave }, async (span) => {
     const m = await load(uid, id);
     if (statusOf(m) === 'pending') await matches.setResponse(m.id, m.user_a === uid ? 'a' : 'b', !!wave);
-    return view(uid, await load(uid, id));
-  }
+    const result = await view(uid, await load(uid, id));
+    span.setAttribute('match.status', result.status);
+    return result;
+  });
 
   async function block(uid, id, reason) {
     const m = await load(uid, id);
