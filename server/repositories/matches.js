@@ -65,7 +65,9 @@ exports.completeAndAward = async (id, points) =>
 exports.runsFor = (uid) =>
   q(`select m.id as match_id, m.quest_status as status, m.quest_started_at, m.quest_completed_at,
             (m.a_response is true and m.b_response is true) as revealed,
-            qu.id as quest_id, qu.title, qu.description, qu.location, qu.starts, qu.cost, qu.free, qu.minutes,
+            qu.id as quest_id, qu.title, qu.description, qu.location, qu.starts, qu.cost, qu.free, qu.minutes, qu.tags,
+            qu.source, qu.source_url, qu.image_url, qu.starts_at, qu.ends_at, qu.price_text, qu.organizer,
+            qu.registration_required, qu.external_category, qu.archetype,
             p.nickname as partner_nickname, p.avatar as partner_avatar
      from matches m
      join quests qu on qu.id = m.quest_id

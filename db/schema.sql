@@ -94,6 +94,25 @@ create table if not exists proximity_events (
 );
 select create_hypertable('proximity_events', by_range('time'), if_not_exists => true);
 
+-- Imported events (WAT2DO). Seeded quests leave `source` null; imported ones fill these in. Re-runnable.
+alter table quests add column if not exists source text;
+alter table quests add column if not exists source_id text;
+alter table quests add column if not exists source_url text;
+alter table quests add column if not exists organizer text;
+alter table quests add column if not exists starts_at timestamptz;              -- real start; `starts` stays the display text
+alter table quests add column if not exists ends_at timestamptz;
+alter table quests add column if not exists price_text text;
+alter table quests add column if not exists registration_required boolean not null default false;
+alter table quests add column if not exists image_url text;
+alter table quests add column if not exists external_category text;
+alter table quests add column if not exists archetype text;
+alter table quests add column if not exists last_seen_at timestamptz;
+alter table quests add column if not exists created_at timestamptz not null default now();
+alter table quests add column if not exists updated_at timestamptz not null default now();
+-- One row per external event. Nulls are distinct, so any number of seeded quests (source null) coexist.
+create unique index if not exists quests_source_source_id on quests (source, source_id);
+create index if not exists quests_upcoming on quests (starts_at) where source is not null;
+
 -- Seed quests (replace with real partner deals/events).
 insert into quests (title, description, location, starts, cost, free, minutes, tags)
 select * from (values

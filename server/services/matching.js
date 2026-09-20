@@ -1,6 +1,7 @@
 const { score, THRESHOLD } = require('./scoring');
 const { httpError } = require('../errors');
 const { validateWearableToken } = require('./validation');
+const { toQuestDto } = require('./questDto');
 
 // Orchestrates proximity signals -> matches. Repositories are injected so this is testable without a database.
 function createMatching({ profiles, matches, wearables, quests, config }) {
@@ -74,7 +75,7 @@ function createMatching({ profiles, matches, wearables, quests, config }) {
       id: Number(m.id), score: m.score, reason: m.reason, shared: m.shared,
       myResponse: m[`${me}_response`], status,
       other: revealed ? await profiles.card(m[`user_${them}`]) : null,
-      quests: revealed ? await quests.byIds(m.quest_ids) : [],
+      quests: revealed ? (await quests.byIds(m.quest_ids)).map(toQuestDto) : [],
       questId: revealed ? m.quest_id ?? null : null,
       questStatus: revealed ? m.quest_status ?? null : null,
     };

@@ -18,6 +18,16 @@ export type SignupInput = ProfileInput & { nickname: string; password: string };
 
 export type Quest = {
   id: number; title: string; description: string; location: string; starts: string; cost: string; minutes: number;
+  // Only set for events imported from an outside source (currently WAT2DO). Seeded quests leave these null/absent, so
+  // every one is optional and older servers keep working.
+  source?: string | null;      // e.g. 'wat2do'
+  sourceUrl?: string | null;   // the event's own page
+  imageUrl?: string | null;
+  startsAt?: string | null;    // ISO instants; `starts` is the same moment as display text in Waterloo time
+  endsAt?: string | null;
+  priceText?: string | null;
+  organizer?: string | null;
+  registrationRequired?: boolean;
 };
 export type QuestStatus = 'selected' | 'active' | 'completed';
 export type QuestRun = {

@@ -1,9 +1,10 @@
 const { httpError } = require('../errors');
+const { toQuestDto } = require('./questDto');
 
 const shape = (r) => ({
   matchId: Number(r.match_id),
   status: r.status,
-  quest: { id: r.quest_id, title: r.title, description: r.description, location: r.location, starts: r.starts, cost: r.cost, minutes: r.minutes },
+  quest: toQuestDto({ ...r, id: r.quest_id }),
   partner: r.revealed && r.partner_nickname ? { nickname: r.partner_nickname, avatar: r.partner_avatar } : null,
   startedAt: r.quest_started_at ?? null,
   completedAt: r.quest_completed_at ?? null,
@@ -60,7 +61,7 @@ function createQuests({ matches, quests, profiles, config }) {
     const done = runs.filter(r => r.status === 'completed');
     const current = runs.find(r => r.status === 'active') ?? runs.find(r => r.status === 'selected') ?? null;
     const suggested = profile
-      ? await quests.suggested(profile.archetypes, profile.budget === 'free', runs.map(r => r.quest.id)) : [];
+      ? (await quests.suggested(profile.archetypes, profile.budget === 'free', runs.map(r => r.quest.id))).map(toQuestDto) : [];
     return { active: current, suggested, history: done };
   }
 

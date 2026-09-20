@@ -150,6 +150,18 @@ Discovery is one typed state machine in `mobile/src/state/discoveryMachine.ts`. 
 
 **Legacy time-window pairing.** The original firmware sends a bare `MATCH` with no identity. For that, the server pairs you with anyone who reported a signal in the last 20 seconds, and the phone retries every 3 seconds for about 20 seconds. Two separate pairs meeting at once can be crossed, so this path is **demo-only**: the server accepts it only when `DEMO_MODE=true` and otherwise answers `403`.
 
+## Imported events (WAT2DO)
+
+Real Waterloo events from [wat2do.ca](https://wat2do.ca) are offered alongside the seeded quests. **Only the server talks to WAT2DO**; the app just sees more quests.
+
+- **How:** a headless browser (Playwright) loads the public listing and scrolls it. WAT2DO's RSS feed is a stale snapshot without event dates, and its `/api/` is disallowed by `robots.txt`, so neither is used. The parser (`server/services/wat2do.js`) is pure and reads each card row by its icon, not its position.
+- **When:** manually with `POST /admin/import-wat2do` (Bearer `ADMIN_IMPORT_SECRET`), or hourly if `ENABLE_WAT2DO_IMPORT=true`. Both call the same importer, which never runs twice at once. Nothing scrapes when a user asks for quests.
+- **What is stored:** events are upserted by `(source, source_id)`, so re-importing updates rather than duplicates, and old events are never deleted.
+- **What is offered:** only events that haven't ended (no end time is treated as three hours), with a matching archetype preferred. Each is classified into one of the four archetypes by keywords (a food tag is weak evidence, since it usually means food is provided), and an unknown price is never treated as free.
+- **In the app:** an imported event shows its date, place, price, picture (with a placeholder if it fails to load), a **VIEW EVENT DETAILS** button that opens the event page in the browser, and the line "Event from WAT2DO".
+
+See [README.md](README.md) for setup, environment variables, and what to do if WAT2DO's markup changes.
+
 ## Demo mode
 
 Hardware and venue Bluetooth can fail, so there's a demo mode. It's off by default and needs **both** flags:
@@ -189,18 +201,20 @@ sidequests/
 ├── server/                  Node + Express 5 + pg
 │   ├── index.js             App setup only
 │   ├── routes/              HTTP routes (thin)
-│   ├── services/            matching, quests, accounts, demo, scoring, validation
+│   ├── services/            matching, quests, accounts, demo, scoring, validation,
+│   │                        wat2do (scraper + parser), eventImport, eventClassifier, importScheduler
 │   ├── repositories/        All SQL
 │   ├── middleware/          Auth (sessions) and error handling
 │   ├── container.js         Wires repositories into services
 │   ├── test/                Unit tests (in-memory fakes, no database)
 │   ├── timescale-ca.pem     CA cert for the DB connection
 │   └── .env                 DATABASE_URL, PORT, DEMO_MODE (optional)
+├── README.md                Setup for the WAT2DO importer (install, env vars, manual import, cron)
 ├── db/schema.sql            Tables, hypertable, seed quests (re-runnable upgrades)
 └── docs/firmware-protocol.md   What the wearable firmware must send
 ```
 
-**API routes** (all need a session token except `POST /signup` and `POST /login`):
+**API routes** (all need a session token except `POST /signup`, `POST /login` and the admin route, which has its own secret):
 
 | Area | Routes |
 |---|---|
@@ -211,6 +225,7 @@ sidequests/
 | Quests | `GET /quests`, `POST /matches/:id/quest`, `POST /matches/:id/quest/start`, `POST /matches/:id/quest/complete` |
 | Blocks | `GET /blocks`, `DELETE /blocks/:id` |
 | Demo only | `POST /demo/nearby` (mounted only when `DEMO_MODE=true`) |
+| Admin | `POST /admin/import-wat2do` (guarded by `ADMIN_IMPORT_SECRET`, not a user session) |
 
 **Auth:** accounts use a nickname and password. The password is hashed with `scrypt` and a per-user salt. `/signup` and `/login` return a random 32-byte session token, which the phone keeps in AsyncStorage and sends as a `Bearer` token. The server stores only the **SHA-256 hash** of it, in `sessions`, so signing out really revokes it. There is no password recovery or change-password.
 
@@ -219,7 +234,7 @@ sidequests/
 - `users`: id, password hash and the lowercase login name. Rows from before accounts existed (a legacy device key) can't be signed into. `demo_owner` marks simulated demo players.
 - `sessions`: one row per signed-in device.
 - `profiles`: nickname, avatar, archetypes, quiz answers, wants, budget, status, points.
-- `quests`: 8 seeded ones (Dumpling Dash, Snack Swap, Sunset Loop, Hidden Mural Hunt, Pickup Frisbee, Climbing Taster, Sketch & Sip, Hack Night Demo).
+- `quests`: 8 seeded ones (Dumpling Dash, Snack Swap, Sunset Loop, Hidden Mural Hunt, Pickup Frisbee, Climbing Taster, Sketch & Sip, Hack Night Demo), plus **imported WAT2DO events** (see below). Imported rows carry a `source`, `source_id`, link, image, organizer, real `starts_at`/`ends_at`, price, archetype and `last_seen_at`, with a unique index on `(source, source_id)`.
 - `matches`: the pair, score, reason, shared archetypes, offered quest IDs, both responses, and the chosen quest with its status and started/completed times.
 - `wearables`: one wearable token per account.
 - `blocks`: who blocked whom.
@@ -228,11 +243,11 @@ sidequests/
 ## Running it locally
 
 1. `npm install` in `mobile/` and `server/`, then `cd server && npm run db:init` (safe to re-run; it also upgrades older databases).
-2. `cd server && npm start` runs the API on `:3000`. Add `DEMO_MODE=true` in front for a hardware-free demo or the current firmware.
+2. `cd server && npx playwright install chromium` (one-time, only needed for WAT2DO imports), then `npm start` runs the API on `:3000`. Add `DEMO_MODE=true` in front for a hardware-free demo or the current firmware.
 3. `cd server && npx cloudflared tunnel --url http://localhost:3000` exposes it. Put the printed `https://….trycloudflare.com` URL in `mobile/.env` as `EXPO_PUBLIC_API_URL`. The URL changes every time `cloudflared` restarts.
 4. `cd mobile && npx expo start --clear --dev-client` runs Metro. The app itself is a native dev build (`npx expo run:ios --device`, which needs Xcode 27 or a recent enough Xcode for Swift 6.2 or later, and CocoaPods). Expo Go won't work because of `react-native-ble-plx` and the native navigation modules.
 
-**Tests:** `cd server && npm test` (matching, pairing, quests, demo), `cd mobile && npm test` (discovery state machine and the wearable message parser) and `cd mobile && npx tsc --noEmit`.
+**Tests:** `cd server && npm test` (matching, pairing, quests, demo, event import), `cd server && npm run test:db` (SQL tests against `DATABASE_URL`), `cd mobile && npm test` (discovery state machine and the wearable message parser) and `cd mobile && npx tsc --noEmit`.
 
 The iOS simulator has no Bluetooth, so the real wearable features need a physical iPhone. Demo mode works without one.
 
@@ -242,7 +257,8 @@ The iOS simulator has no Bluetooth, so the real wearable features need a physica
 - **Wearable tokens are effectively public to nearby phones,** and linking is "last link wins", so someone who reads your token could link it to their own account. The doc describes the fix (a separate secret link token).
 - **Legacy time-window pairing** can cross two pairs that meet at the same time, so it's gated behind `DEMO_MODE`. Don't run a real deployment with demo mode on.
 - **The simulated player's wave is an in-process timer.** Restarting the server within about 6 seconds of a simulation drops it.
-- **Quests aren't location-aware.** They're a small seeded list, "suggested nearby" is ordered by your archetypes, and there's no photo verification.
+- **Quests aren't location-aware.** They're a small seeded list plus imported WAT2DO events, "suggested nearby" is ordered by your archetypes and start time, and there's no photo verification.
+- **The WAT2DO importer depends on a third party's page markup,** which can change without notice (it then fails loudly). WAT2DO publishes no terms, so ask them before relying on it beyond a demo. The event pictures are loaded from their servers.
 - **No password recovery, and no rate limiting on login.**
 - **`timestamp` on a signal is accepted but not enforced.**
 - **No linter is configured,** and the mobile UI has no automated tests beyond the state machine and message parser.

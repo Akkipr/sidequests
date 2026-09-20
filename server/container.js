@@ -12,6 +12,8 @@ const { createAccounts } = require('./services/accounts');
 const { createMatching } = require('./services/matching');
 const { createQuests } = require('./services/quests');
 const { createDemo } = require('./services/demo');
+const { createEventImporter } = require('./services/eventImport');
+const { scrapeWat2do } = require('./services/wat2do');
 
 module.exports = {
   repos,
@@ -20,4 +22,5 @@ module.exports = {
   matching: createMatching({ ...repos, config }),
   quests: createQuests({ ...repos, config }),
   demo: createDemo({ ...repos, config }),
+  importer: createEventImporter({ scrape: scrapeWat2do, quests: repos.quests, config }),
 };

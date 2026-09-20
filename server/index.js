@@ -3,6 +3,8 @@ const express = require('express');
 const config = require('./config');
 const routes = require('./routes');
 const errorHandler = require('./middleware/errors');
+const { importer } = require('./container');
+const { startWat2doSchedule } = require('./services/importScheduler');
 
 const app = express();
 app.use(express.json());
@@ -12,4 +14,5 @@ app.use(errorHandler);
 const port = process.env.PORT ?? 3000;
 app.listen(port, '0.0.0.0', () => {
   console.log(`SideQuests API on :${port}${config.demoMode() ? ' (DEMO MODE: demo routes + legacy signals enabled)' : ''}`);
+  startWat2doSchedule({ importer, config });
 });
