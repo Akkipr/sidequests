@@ -9,6 +9,7 @@ module.exports = {
   DEMO_WAVE_DELAY_MS: 6000,
   LEGACY_WINDOW_SECONDS: 20,
   CURRENT_MATCH_MINUTES: 10, // how far back 'do I have a match?' looks
+  OPEN_MATCH_MINUTES: 10,    // a pair's still-open match is reused for this long, so two phones converge on ONE match
   // WAT2DO event import. All off / empty by default; read at call time like demoMode.
   // A too-short secret, or the placeholder from .env.example, counts as "not configured" so the endpoint stays locked.
   adminSecret: () => {

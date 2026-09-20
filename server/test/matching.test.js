@@ -53,12 +53,89 @@ test('malformed tokens are rejected before any lookup', async () => {
   }
 });
 
-test('duplicate protection: repeated signals return the same match', async () => {
+test('while a match is open, repeated signals from either phone return the same one', async () => {
   const { w, near } = setup();
   const first = await near('u-alice', 'tok-bob');
   const second = await near('u-bob', 'tok-alice');
   assert.equal(first.matchId, second.matchId);
+  assert.equal((await near('u-alice', 'tok-bob')).matchId, first.matchId);
   assert.equal(w.matches.length, 1);
+});
+
+test('both phones detecting each other at the same instant still end up in ONE match', async () => {
+  const { near } = setup();
+  const [a, b] = await Promise.all([near('u-alice', 'tok-bob'), near('u-bob', 'tok-alice')]);
+  assert.ok(a.matchId);
+  assert.equal(a.matchId, b.matchId); // otherwise they would wave at different matches and never be revealed
+});
+
+// --- no cooldown between meetings ---
+
+test('no cooldown: once a match is revealed, the same two people can match again straight away', async () => {
+  const { w, matching, near } = setup();
+  const first = (await near('u-alice', 'tok-bob')).matchId;
+  await matching.respond('u-alice', first, true);
+  await matching.respond('u-bob', first, true); // revealed
+  const again = (await near('u-alice', 'tok-bob')).matchId;
+  assert.ok(again);
+  assert.notEqual(again, first);
+  assert.equal(w.matches.length, 2);
+  assert.equal((await matching.get('u-alice', first)).status, 'revealed'); // the earlier meeting is untouched
+  assert.equal((await matching.get('u-alice', again)).status, 'pending');
+});
+
+test('no cooldown: after "not now" (or a withdrawn wave) they can be matched again straight away', async () => {
+  const { matching, near } = setup();
+  const first = (await near('u-alice', 'tok-bob')).matchId;
+  await matching.respond('u-bob', first, false);
+  const second = (await near('u-alice', 'tok-bob')).matchId;
+  assert.notEqual(second, first);
+
+  await matching.respond('u-alice', second, true);
+  await matching.respond('u-alice', second, false); // waved, then cancelled
+  const third = (await near('u-bob', 'tok-alice')).matchId;
+  assert.notEqual(third, second);
+});
+
+test('they can meet again and again, any number of times', async () => {
+  const { w, matching, near } = setup();
+  const ids = new Set();
+  for (let i = 0; i < 6; i++) {
+    const id = (await near(i % 2 ? 'u-bob' : 'u-alice', i % 2 ? 'tok-alice' : 'tok-bob')).matchId;
+    ids.add(id);
+    await matching.respond('u-alice', id, true);
+    await matching.respond('u-bob', id, true);
+  }
+  assert.equal(ids.size, 6);
+  assert.equal(w.matches.length, 6);
+});
+
+test('an unanswered match goes stale after the window, and a fresh one can start', async () => {
+  const { w, near } = setup();
+  const first = (await near('u-alice', 'tok-bob')).matchId;
+  w.matches[0].created_at -= 11 * 60000; // 11 minutes ago
+  const second = (await near('u-alice', 'tok-bob')).matchId;
+  assert.notEqual(second, first);
+});
+
+test('no cooldown does not mean no limits: a blocked pair never matches again, even after an earlier meeting ended', async () => {
+  const { w, matching, near } = setup();
+  const first = (await near('u-alice', 'tok-bob')).matchId;
+  await matching.respond('u-alice', first, true);
+  await matching.respond('u-bob', first, true);
+  await matching.block('u-alice', first, 'no thanks');
+  assert.equal((await near('u-alice', 'tok-bob')).matchId, null);
+  assert.equal((await near('u-bob', 'tok-alice')).matchId, null);
+  assert.equal(w.matches.length, 1);
+});
+
+test('no cooldown does not mean everyone: both people must still be discoverable', async () => {
+  const { w, matching, near } = setup();
+  const first = (await near('u-alice', 'tok-bob')).matchId;
+  await matching.respond('u-alice', first, true);
+  await matching.respond('u-bob', first, true);
+  w.profiles.get('u-bob').status = 'off';
+  assert.equal((await near('u-alice', 'tok-bob')).matchId, null);
 });
 
 test('blocked users never match, in either direction', async () => {

@@ -18,7 +18,7 @@ function createMatching({ profiles, matches, wearables, quests, config }) {
     const [a, b] = await Promise.all([profiles.get(ua), profiles.get(ub)]);
     if (!a || !b || a.status === 'off' || b.status === 'off') return done('not_discoverable');
 
-    const existing = await matches.findRecent(ua, ub); // one-hour duplicate protection
+    const existing = await matches.findOpen(ua, ub, config.OPEN_MATCH_MINUTES); // one open match per pair at a time
     if (existing) return done('existing', existing.id);
 
     const s = score(a, b);
@@ -31,7 +31,7 @@ function createMatching({ profiles, matches, wearables, quests, config }) {
     log.info('match created', { 'match.score': s.score, 'match.shared': s.shared.join(','), 'match.free_only': freeOnly });
     distribution('match.score', s.score, 'none');
     // Both phones may insert at once; everyone converges on the oldest row.
-    return done('created', (await matches.findRecent(ua, ub)).id);
+    return done('created', (await matches.findOpen(ua, ub, config.OPEN_MATCH_MINUTES)).id);
   });
 
   // Exact-peer pairing: the phone reports the wearable token it detected, so only that pair is scored.

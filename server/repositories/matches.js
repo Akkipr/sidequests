@@ -6,10 +6,17 @@ const SIDE = { a: 'a_response', b: 'b_response' }; // whitelist, since the colum
 exports.isBlocked = async (a, b) =>
   (await q('select 1 from blocks where (blocker = $1 and blocked = $2) or (blocker = $2 and blocked = $1)', [a, b])).length > 0;
 
-// One-hour duplicate protection: the oldest match for this pair in the last hour.
-exports.findRecent = (ua, ub) =>
-  first(q(`select id from matches where user_a = $1 and user_b = $2 and created_at > now() - interval '1 hour'
-           order by id limit 1`, [ua, ub]));
+// The pair's OPEN match, oldest first: nobody has said no, it isn't revealed yet, and it is recent. Signals reuse it,
+// so two phones that detect each other at the same moment end up in ONE match. Once a match is declined or revealed
+// (or goes stale) it is no longer open, so the same two people can be matched again straight away: there is no
+// cooldown between meetings.
+exports.findOpen = (ua, ub, minutes) =>
+  first(q(`select id from matches
+           where user_a = $1 and user_b = $2
+             and created_at > now() - make_interval(mins => $3)
+             and a_response is distinct from false and b_response is distinct from false
+             and not (a_response is true and b_response is true)
+           order by id limit 1`, [ua, ub, minutes]));
 
 exports.insert = async ({ ua, ub, score, reason, shared, questIds }) =>
   (await first(q(`insert into matches (user_a, user_b, score, reason, shared, quest_ids)

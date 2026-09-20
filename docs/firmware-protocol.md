@@ -80,8 +80,10 @@ Authorization: Bearer <session token>
 ```
 
 The server then, for that exact pair only: resolves the token to a user → checks blocks → checks both people are
-discoverable → scores them → creates (or returns) the match. It never looks at anyone else's signals. A match for
-the same pair is not created again within one hour.
+discoverable → scores them → creates (or returns) the match. It never looks at anyone else's signals. While a pair's
+match is still **open** (nobody has said no, it isn't revealed yet, and it is under 10 minutes old) a signal returns that
+same match, so two phones that detect each other at the same moment end up in one match. Once it is declined or revealed
+the pair can be matched again immediately: there is no cooldown between meetings.
 
 Response: `{ "matchId": 12 }`, `{ "matchId": null }`, or `{ "matchId": null, "reason": "unknown_wearable" }` if the
 token isn't linked to any account.

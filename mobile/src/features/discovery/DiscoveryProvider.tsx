@@ -200,7 +200,12 @@ export function DiscoveryProvider({ children }: { children: ReactNode }) {
     };
 
     return {
-      start: (intent: Intent) => { appLog.info('discovery started', { intent }); send({ type: 'START', intent }); },
+      start: (intent: Intent) => {
+        seen.current.clear();     // a fresh start may show a still-open match (and re-report a nearby wearable) again
+        lastNear.current.clear();
+        appLog.info('discovery started', { intent });
+        send({ type: 'START', intent });
+      },
       changeIntent: (intent: Intent) => send({ type: 'CHANGE_INTENT', intent }),
       goPrivate: () => {
         const { state, match } = cur();

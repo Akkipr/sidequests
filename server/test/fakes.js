@@ -4,7 +4,7 @@ const profile = (o) => ({ nickname: 'x', avatar: '🦊', archetypes: ['foodie'],
 
 function makeWorld({ demo = false } = {}) {
   const w = { profiles: new Map(), tokens: new Map(), blocks: [], matches: [], proximity: [], nextId: 1, demo };
-  const config = { demoMode: () => w.demo, QUEST_POINTS: 50, MIN_PASSWORD: 8, DEMO_WAVE_DELAY_MS: 6000, LEGACY_WINDOW_SECONDS: 20 };
+  const config = { demoMode: () => w.demo, QUEST_POINTS: 50, MIN_PASSWORD: 8, DEMO_WAVE_DELAY_MS: 6000, LEGACY_WINDOW_SECONDS: 20, CURRENT_MATCH_MINUTES: 10, OPEN_MATCH_MINUTES: 10 };
   const QUESTS = [1, 2, 3, 4].map(id => ({ id, title: `Quest ${id}`, description: 'd', location: 'l', starts: 'Now', cost: 'Free', free: true, minutes: 30, tags: ['foodie'] }));
   const side = (m, uid) => (m.user_a === uid ? 'a' : 'b');
 
@@ -24,10 +24,12 @@ function makeWorld({ demo = false } = {}) {
   };
   const matches = {
     isBlocked: async (a, b) => w.blocks.some(x => (x.blocker === a && x.blocked === b) || (x.blocker === b && x.blocked === a)),
-    findRecent: async (ua, ub) => w.matches.find(m => m.user_a === ua && m.user_b === ub),
+    findOpen: async (ua, ub, minutes) => w.matches.find(m => m.user_a === ua && m.user_b === ub
+      && m.a_response !== false && m.b_response !== false && !(m.a_response && m.b_response)
+      && Date.now() - m.created_at <= minutes * 60000),
     insert: async ({ ua, ub, score, reason, shared, questIds }) => {
       const id = w.nextId++;
-      w.matches.push({ id, user_a: ua, user_b: ub, score, reason, shared, quest_ids: questIds, a_response: null, b_response: null,
+      w.matches.push({ id, user_a: ua, user_b: ub, score, reason, shared, quest_ids: questIds, a_response: null, b_response: null, created_at: Date.now(),
         quest_id: null, quest_status: null, quest_started_at: null, quest_completed_at: null });
       return id;
     },
