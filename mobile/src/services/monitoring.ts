@@ -1,8 +1,8 @@
 import * as Sentry from '@sentry/react-native';
 import type { NavigationContainerRefWithCurrent, ParamListBase } from '@react-navigation/native';
 import { expo } from '../../app.json';
-import { API_URL, SENTRY_DSN, SENTRY_RELEASE, SENTRY_TRACES_SAMPLE_RATE_RAW } from '../config';
-import { dropExpected, parseSampleRate, releaseName, scrubLog } from './monitoringFilters';
+import { API_URL, SENTRY_DEBUG, SENTRY_DSN, SENTRY_RELEASE, SENTRY_REPLAY_SESSION_RATE_RAW, SENTRY_TRACES_SAMPLE_RATE_RAW } from '../config';
+import { dropExpected, parseSampleRate, releaseName, REPLAY_PRIVACY, replayRates, scrubLog } from './monitoringFilters';
 
 // Crash and error reporting plus release health and performance. Off unless EXPO_PUBLIC_SENTRY_DSN is set.
 //
@@ -22,8 +22,10 @@ const navigationIntegration = Sentry.reactNavigationIntegration();
 
 export function initMonitoring() {
   if (!monitoringEnabled) return;
+  const replays = replayRates(SENTRY_REPLAY_SESSION_RATE_RAW, __DEV__);
   Sentry.init({
     dsn: SENTRY_DSN,
+    debug: SENTRY_DEBUG,
     environment: __DEV__ ? 'development' : 'production',
     release: RELEASE,
     dist: DIST,
@@ -41,7 +43,14 @@ export function initMonitoring() {
     enableLogs: true,
     logsOrigin: 'js',
     beforeSendLog: scrubLog,
-    integrations: [navigationIntegration, Sentry.consoleLoggingIntegration({ levels: ['warn', 'error'] })],
+    // Session Replay: what people did on screen, with ALL text, images and icons masked (see REPLAY_PRIVACY).
+    replaysSessionSampleRate: replays.session,
+    replaysOnErrorSampleRate: replays.onError,
+    integrations: [
+      navigationIntegration,
+      Sentry.consoleLoggingIntegration({ levels: ['warn', 'error'] }),
+      Sentry.mobileReplayIntegration({ ...REPLAY_PRIVACY }),
+    ],
     // Send trace headers to OUR API only, so an action in the app and the server request it caused show up as one trace.
     // (The headers carry ids and the release name, nothing about the player.)
     tracePropagationTargets: [API_URL],

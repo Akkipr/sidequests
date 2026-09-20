@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dropExpected, isExpectedError, parseSampleRate, releaseName, routeName, scrubLog } from './monitoringFilters.ts';
+import { dropExpected, isExpectedError, parseSampleRate, releaseName, REPLAY_PRIVACY, replayRates, routeName, scrubLog } from './monitoringFilters.ts';
 
 class AuthError extends Error {
   name = 'AuthError';
@@ -72,4 +72,17 @@ test('logs redact token-shaped text and cap long values', () => {
 test('logs without attributes, and other fields of the log, are left alone', () => {
   assert.deepEqual(scrubLog({ message: 'hello' }), { message: 'hello', attributes: {} });
   assert.equal((scrubLog({ message: 'm', level: 'warn' } as { message: string; level: string })).level, 'warn');
+});
+
+test('session replay masks all text, images and vectors, and this must never be loosened', () => {
+  assert.deepEqual(REPLAY_PRIVACY, { maskAllText: true, maskAllImages: true, maskAllVectors: true });
+});
+
+test('replay records every session while developing and 10% otherwise; errors are always recorded', () => {
+  assert.deepEqual(replayRates(undefined, true), { session: 1, onError: 1 });
+  assert.deepEqual(replayRates(undefined, false), { session: 0.1, onError: 1 });
+  assert.deepEqual(replayRates('0.5', false), { session: 0.5, onError: 1 });
+  assert.deepEqual(replayRates('0', true), { session: 0, onError: 1 });   // zero switches ordinary-session replay off
+  assert.deepEqual(replayRates('nope', false), { session: 0.1, onError: 1 }); // a bad value falls back, never to "record everything"
+  assert.deepEqual(replayRates('5', false), { session: 0.1, onError: 1 });
 });

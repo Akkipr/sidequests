@@ -53,3 +53,17 @@ export function scrubLog<L extends { message: unknown; attributes?: Record<strin
   }
   return { ...log, message: cleanText(String(log.message)), attributes };
 }
+
+// ---- Session Replay ----
+// Replay records the SCREEN. SideQuests shows other players' names and avatars only after a mutual wave and has password
+// fields, so everything stays masked: replays show layout, navigation and taps, never text, pictures or icons. These are
+// the SDK's defaults, spelled out (and tested) so a future default or a careless edit can't loosen them.
+export const REPLAY_PRIVACY = { maskAllText: true, maskAllImages: true, maskAllVectors: true } as const;
+
+/**
+ * Share of ordinary sessions to record, and of sessions that hit an error. While developing, record everything so replays
+ * show up quickly; otherwise 10%. Sessions with an error are always recorded.
+ */
+export function replayRates(rawSessionRate: string | undefined | null, dev: boolean): { session: number; onError: number } {
+  return { session: parseSampleRate(rawSessionRate, dev ? 1 : 0.1), onError: 1 };
+}

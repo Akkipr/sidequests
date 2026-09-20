@@ -31,6 +31,13 @@ The app reports crashes and errors to Sentry (org `uwaterloo-c7`, project `sydeq
   The app also writes a few deliberate usage logs (`wave sent`, `quest completed`, `signed in`, `session expired`, ...) with
   fixed messages and non-identifying attributes only. Every log goes through a scrub that drops sensitive attributes
   (passwords, tokens, nicknames, ...), redacts token-shaped text, and caps length. Find them under **Explore → Logs**.
+- **Session Replay:** records what people do on screen (navigation, taps), with **all text, images and icons masked**, so a
+  replay looks like grey blocks. That is deliberate: other players' names and avatars are only shown after a mutual wave,
+  and the sign-in screens have password fields. The masking is set in `REPLAY_PRIVACY` (`services/monitoringFilters.ts`) and a
+  test fails if anyone loosens it. **Please don't unmask.** Sampling: every session while developing and 10% otherwise
+  (`EXPO_PUBLIC_SENTRY_REPLAY_SESSION_RATE` overrides, 0 to 1); sessions with an error are always recorded. Replays upload when
+  a session ends (the app goes to the background) and appear under **Replays**. No native rebuild is needed: the replay code
+  was already part of the Sentry native module.
 - **Check it works:** with demo mode on (`EXPO_PUBLIC_DEMO_MODE=true`) the Profile tab shows **SEND TEST ERROR TO SENTRY**.
   Tap it, then look for the event in the project's Issues.
 - The server is not instrumented (the DSN is for the React Native project). Add `@sentry/node` with its own project if you
