@@ -21,6 +21,7 @@ the service UUID below.
 | Service | `abcd1234-1234-1234-1234-abcdef123456` | | |
 | **Match characteristic** | `abcd1234-1234-1234-1234-abcdef123457` | read, **notify** | UTF-8 message (see below) |
 | **Token characteristic** *(new)* | `abcd1234-1234-1234-1234-abcdef123458` | read | UTF-8 string: this wearable's own token |
+| **State characteristic** *(new)* | `abcd1234-1234-1234-1234-abcdef123459` | write | `NONE` \| `CANDIDATE` \| `WAITING` \| `MATCHED`: what the phone is showing, so the wearable's display can prompt |
 
 Values are written as raw UTF-8 bytes; the phone base64-decodes them and trims whitespace.
 
@@ -47,6 +48,7 @@ Values are written as raw UTF-8 bytes; the phone base64-decodes them and trims w
 |---|---|
 | `NEAR:<peer-token>:<rssi>` | *New.* This wearable detected another wearable. `<peer-token>` is the **other** wearable's token; `<rssi>` is a signed integer in dBm (e.g. `NEAR:x7Kp2mQ9:-57`). |
 | `IDLE` | Nothing is nearby any more. |
+| `WAVE` / `PASS` | The wearable's own buttons answered a pending match. The app treats these exactly like tapping Wave / Not now, and ignores them unless a candidate is open. |
 | `MATCH` | **LEGACY.** "Someone is near", no identity. Still parsed by the app, but see below. |
 
 Guidance for firmware:
@@ -100,3 +102,13 @@ firmware is updated. Do not rely on it in a real deployment.
   a single token, as specified; splitting them is a small change on both sides.
 * `timestamp` is accepted but not enforced. Add a freshness window if replayed signals become a concern.
 * Nothing here is encrypted beyond standard BLE link security.
+
+## Display link (ESP32 <-> Arduino UNO R4)
+
+Local to one person's kit, over the wearable's own Wi-Fi AP by UDP. The server and app never see it.
+
+* Wearable -> display, once a second: `S:<phone linked>:<peers near>:<best rssi>:<match state 0-3>:<range>:<brightness>:<buzzer>:<encounters>`, and `I:<token>` in reply to `HELLO`.
+* Display -> wearable: `HELLO` (boot and keepalive), `WAVE`, `PASS`, `SET:ENTER:<dBm>`, `SET:BRIGHT:<pct>`, `SET:BUZZ:<0|1>`.
+
+Settings live on the wearable (saved to flash, clamped there as well as on the display), so a display reflashed
+with something else cannot push the wearable into a state where matching never fires.
