@@ -3,7 +3,7 @@ const { promisify } = require('util');
 const { httpError } = require('../errors');
 const { validateProfile } = require('./validation');
 const { sha } = require('../tokens');
-const { withSpan, count } = require('../telemetry');
+const { withSpan, count, log } = require('../telemetry');
 
 const scrypt = promisify(crypto.scrypt);
 
@@ -61,15 +61,25 @@ function createAccounts({ accounts, profiles, tx, config }) {
       const result = await doSignup(body);
       span.setAttribute('auth.result', 'ok');
       count('players.signed_up');
+      log.info('player signed up');
       return result;
-    } catch (e) { span.setAttribute('auth.result', outcomeOf(e)); throw e; }
+    } catch (e) {
+      span.setAttribute('auth.result', outcomeOf(e));
+      log[e.status === 409 ? 'warn' : 'info'](e.status === 409 ? 'signup rejected: name already taken' : 'signup rejected', { 'auth.result': outcomeOf(e) });
+      throw e;
+    }
   });
   const login = (body) => withSpan('auth.login', {}, async (span) => {
     try {
       const result = await doLogin(body);
       span.setAttribute('auth.result', 'ok');
+      log.info('player signed in');
       return result;
-    } catch (e) { span.setAttribute('auth.result', outcomeOf(e)); throw e; }
+    } catch (e) {
+      span.setAttribute('auth.result', outcomeOf(e));
+      log.warn('sign-in failed', { 'auth.result': outcomeOf(e) }); // never who it was
+      throw e;
+    }
   });
 
   async function logout(uid, tokenHash) {

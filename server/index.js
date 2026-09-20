@@ -1,7 +1,7 @@
 require('./instrument'); // first: Sentry must be initialised before express and pg are loaded (it also loads .env)
 const express = require('express');
 const Sentry = require('@sentry/node');
-const { tagSyntheticTraffic } = require('./telemetry');
+const { tagSyntheticTraffic, log } = require('./telemetry');
 const config = require('./config');
 const routes = require('./routes');
 const errorHandler = require('./middleware/errors');
@@ -18,5 +18,6 @@ app.use(errorHandler);
 const port = process.env.PORT ?? 3000;
 app.listen(port, '0.0.0.0', () => {
   console.log(`SideQuests API on :${port}${config.demoMode() ? ' (DEMO MODE: demo routes + legacy signals enabled)' : ''}`);
+  log.info('server started', { port: Number(port), 'app.demo_mode': config.demoMode() });
   startWat2doSchedule({ importer, config });
 });

@@ -2,7 +2,7 @@ const { score, THRESHOLD } = require('./scoring');
 const { httpError } = require('../errors');
 const { validateWearableToken } = require('./validation');
 const { toQuestDto } = require('./questDto');
-const { withSpan, count, distribution } = require('../telemetry');
+const { withSpan, count, distribution, log } = require('../telemetry');
 
 // Orchestrates proximity signals -> matches. Repositories are injected so this is testable without a database.
 function createMatching({ profiles, matches, wearables, quests, config }) {
@@ -14,7 +14,7 @@ function createMatching({ profiles, matches, wearables, quests, config }) {
     const [ua, ub] = [me, peer].sort();
 
     // Blocks and discovery come first so they also stop an existing match from being handed back.
-    if (await matches.isBlocked(ua, ub)) return done('blocked');
+    if (await matches.isBlocked(ua, ub)) { log.info('signal ignored: this pair is blocked'); return done('blocked'); }
     const [a, b] = await Promise.all([profiles.get(ua), profiles.get(ub)]);
     if (!a || !b || a.status === 'off' || b.status === 'off') return done('not_discoverable');
 
@@ -28,6 +28,7 @@ function createMatching({ profiles, matches, wearables, quests, config }) {
     const picks = await quests.pickForMatch(s.shared, freeOnly);
     await matches.insert({ ua, ub, score: s.score, reason: s.reason, shared: s.shared, questIds: picks.map(x => x.id) });
     count('matches.created');
+    log.info('match created', { 'match.score': s.score, 'match.shared': s.shared.join(','), 'match.free_only': freeOnly });
     distribution('match.score', s.score, 'none');
     // Both phones may insert at once; everyone converges on the oldest row.
     return done('created', (await matches.findRecent(ua, ub)).id);
@@ -100,6 +101,7 @@ function createMatching({ profiles, matches, wearables, quests, config }) {
     if (statusOf(m) === 'pending') await matches.setResponse(m.id, m.user_a === uid ? 'a' : 'b', !!wave);
     const result = await view(uid, await load(uid, id));
     span.setAttribute('match.status', result.status);
+    log.info(result.status === 'revealed' ? 'party formed' : wave ? 'wave sent' : 'wave withdrawn', { 'match.status': result.status });
     return result;
   });
 

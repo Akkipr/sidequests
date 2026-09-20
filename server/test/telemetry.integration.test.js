@@ -4,7 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Sentry = require('@sentry/node');
-const { buildOptions, tagSyntheticTraffic, withSpan } = require('../telemetry');
+const { buildOptions, tagSyntheticTraffic, withSpan, log } = require('../telemetry');
 
 const sent = [];
 const transport = () => ({
@@ -21,6 +21,11 @@ app.use(tagSyntheticTraffic);
 app.post('/login', (req, res) => res.json({ ok: true }));
 app.post('/matches/:id/respond', async (req, res) => {
   await withSpan('match.respond', { 'match.wave': !!req.body.wave }, async () => {});
+  res.json({ ok: true });
+});
+app.post('/loggy', (req, res) => {
+  // a careless developer puts secrets in a log: none of it may reach Sentry
+  log.info('login attempt', { password: req.body.password, nickname: req.body.nickname, 'auth.result': 'ok', detail: `Bearer ${req.headers.authorization}` });
   res.json({ ok: true });
 });
 app.post('/explode', (req, res) => { throw new Error('kaboom inside the handler'); });
@@ -72,4 +77,25 @@ test('nothing a player sends can leave the server, and synthetic traffic is tagg
   const tagged = respond.filter(t => t.tags?.synthetic === 'true');
   assert.equal(tagged.length, 1, 'exactly one of the two respond requests was synthetic');
   assert.equal(tx.filter(t => t.transaction === 'POST /login')[0].tags?.synthetic, undefined);
+});
+
+test('logs reach Sentry stripped of secrets, and carry the synthetic flag only for synthetic requests', async () => {
+  sent.length = 0;
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const headers = { 'Content-Type': 'application/json', Authorization: 'super-secret-log-token' };
+  try {
+    await fetch(`${base}/loggy`, { method: 'POST', headers: { ...headers, 'X-SideQuests-Synthetic': '1' }, body: JSON.stringify({ password: 'log-secret-pw', nickname: 'log-alice' }) });
+    await fetch(`${base}/loggy`, { method: 'POST', headers, body: JSON.stringify({ password: 'log-secret-pw', nickname: 'log-alice' }) });
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+  await Sentry.flush(5000);
+
+  const logs = sent.flatMap(env => env[1].filter(([h]) => h.type === 'log').flatMap(([, p]) => p.items ?? []));
+  assert.equal(logs.length, 2, `expected 2 logs, got ${logs.length}`);
+  const text = JSON.stringify(logs);
+  for (const secret of ['log-secret-pw', 'log-alice', 'super-secret-log-token']) assert.ok(!text.includes(secret), `LEAKED via a log: ${secret}`);
+  assert.ok(logs.every(l => l.body === 'login attempt' && l.attributes['auth.result']?.value === 'ok'), 'the harmless parts should still be there');
+  assert.equal(logs.filter(l => l.attributes.synthetic?.value === true).length, 1, 'only the synthetic request should carry the flag');
 });

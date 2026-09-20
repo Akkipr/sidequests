@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Sentry = require('@sentry/node');
-const { buildOptions, scrub, withSpan, count, distribution, tagSyntheticTraffic, DATA_COLLECTION } = require('../telemetry');
+const { buildOptions, scrub, scrubLog, log, withSpan, count, distribution, tagSyntheticTraffic, DATA_COLLECTION } = require('../telemetry');
 
 const DSN = 'https://key@o1.ingest.de.sentry.io/2';
 
@@ -85,6 +85,8 @@ test('the same scrub is used for errors and for transactions', () => {
   const o = buildOptions({ SENTRY_DSN: DSN });
   assert.equal(o.beforeSend, scrub);
   assert.equal(o.beforeSendTransaction, scrub);
+  assert.equal(o.beforeSendLog, scrubLog);
+  assert.equal(o.enableLogs, true);
 });
 
 test('spans and metrics work when Sentry is not initialised, return the value, and never throw', async () => {
@@ -110,4 +112,37 @@ test('the middleware tags only requests that carry the synthetic header', () => 
     assert.equal(real.synthetic, undefined);
     return tagsFor({ 'x-sidequests-synthetic': '1' });
   }).then(synthetic => assert.equal(synthetic.synthetic, 'true'));
+});
+
+test('scrubLog drops sensitive attributes, whatever their case or spelling', () => {
+  const out = scrubLog({ level: 'info', message: 'x', attributes: {
+    password: 'p', Password: 'p', user_password: 'p', token: 't', 'session.token': 't', sessionId: 's', Authorization: 'a',
+    cookie: 'c', nickname: 'alice', email: 'a@b.c', apiKey: 'k', 'api-key': 'k', secret: 's',
+    'match.score': 88, route: '/matches/:id/respond', ok: true,
+  } });
+  assert.deepEqual(out.attributes, { 'match.score': 88, route: '/matches/:id/respond', ok: true });
+});
+
+test('scrubLog redacts token-shaped text in the message and in string attributes', () => {
+  const token = 'a1b2c3d4'.repeat(8); // 64 hex chars, like our session tokens
+  const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+  const out = scrubLog({ level: 'warn', message: `retrying with ${token}`, attributes: { detail: `Authorization: Bearer ${token}`, jwt, count: 3 } });
+  assert.equal(out.message, 'retrying with [redacted]');
+  assert.ok(!JSON.stringify(out).includes(token) && !JSON.stringify(out).includes('eyJhbGci'));
+  assert.equal(out.attributes.count, 3);
+});
+
+test('scrubLog keeps ordinary text and caps very long values', () => {
+  const out = scrubLog({ level: 'info', message: 'match created', attributes: { 'match.shared': 'foodie,explorer', big: 'x'.repeat(5000) } });
+  assert.equal(out.message, 'match created');
+  assert.equal(out.attributes['match.shared'], 'foodie,explorer');
+  assert.equal(out.attributes.big.length, 500);
+});
+
+test('scrubLog copes with logs that have no attributes', () => {
+  assert.deepEqual(scrubLog({ level: 'info', message: 'hello' }), { level: 'info', message: 'hello', attributes: {} });
+});
+
+test('the log wrapper is safe when Sentry is off', () => {
+  assert.doesNotThrow(() => { log.debug('d'); log.info('i', { a: 1 }); log.warn('w'); log.error('e', { b: 2 }); });
 });

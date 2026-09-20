@@ -1,7 +1,7 @@
 const { classifyEvent } = require('./eventClassifier');
 const { httpError } = require('../errors');
 const { TIMEZONE } = require('./wat2do');
-const { withSpan, count } = require('../telemetry');
+const { withSpan, count, log } = require('../telemetry');
 
 const DEFAULT_MINUTES = 60;
 const MIN_MINUTES = 15;
@@ -73,6 +73,7 @@ function createEventImporter({ scrape, quests, config, logger = console, now = (
         scraped = await withSpan('wat2do.scrape', {}, () => scrape({ baseUrl: config.wat2doBaseUrl(), now: now() }));
       } catch (e) {
         logger.error('wat2do import: could not read the source:', e);
+        log.error('wat2do import failed', { 'import.stage': 'scrape', 'error.type': e.name });
         throw Object.assign(httpError(502, 'import failed'), { cause: e });
       }
 
@@ -95,6 +96,7 @@ function createEventImporter({ scrape, quests, config, logger = console, now = (
           results = await withSpan('wat2do.upsert', { 'import.records': records.length }, () => quests.upsertExternal(records));
         } catch (e) {
           logger.error('wat2do import: database error:', e);
+          log.error('wat2do import failed', { 'import.stage': 'database', 'error.type': e.name });
           throw Object.assign(httpError(502, 'import failed'), { cause: e });
         }
         for (const r of results) {
@@ -107,6 +109,7 @@ function createEventImporter({ scrape, quests, config, logger = console, now = (
       for (const [k, v] of Object.entries(summary)) span.setAttribute(`import.${k}`, v);
       count('wat2do.events_inserted', inserted);
       count('wat2do.events_updated', updated);
+      log.info('wat2do import finished', Object.fromEntries(Object.entries(summary).map(([k, v]) => [`import.${k}`, v])));
       return summary;
     } finally {
       running = false;

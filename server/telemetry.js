@@ -37,8 +37,10 @@ function buildOptions(env = process.env) {
     // The app and the API share one Sentry project, so tag events to tell them apart (filter component:api / component:app).
     initialScope: { tags: { component: 'api' } },
     dataCollection: DATA_COLLECTION,
+    enableLogs: true,
     beforeSend: scrub,
     beforeSendTransaction: scrub,
+    beforeSendLog: scrubLog,
   };
 }
 
@@ -72,6 +74,32 @@ function scrub(event) {
   return event;
 }
 
+// ---- logs ----
+// Logs are free-form text, so they get the same care as everything else. We log on purpose, with fixed messages and
+// non-identifying attributes, and we do NOT capture console output: database errors can include row values, e.g.
+// "Key (nickname_key)=(alice) already exists". `scrubLog` is the backstop for anything that slips through.
+const SENSITIVE_KEY = /pass(word|wd)?|token|secret|authorization|cookie|nickname|email|session|bearer|api[-_]?key/i;
+const TOKEN_LIKE = /\b[0-9a-f]{32,}\b|\bBearer\s+\S+|\beyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{5,}/gi; // long hex (session tokens), bearer values, JWTs
+const MAX_LOG_TEXT = 500;
+const clean = (v) => (typeof v === 'string' ? v.replace(TOKEN_LIKE, '[redacted]').slice(0, MAX_LOG_TEXT) : v);
+
+/** Drops sensitive attributes, redacts token-shaped text, and caps length. Runs on every log before it is sent. */
+function scrubLog(log) {
+  const attributes = {};
+  for (const [key, value] of Object.entries(log.attributes ?? {})) {
+    if (!SENSITIVE_KEY.test(key)) attributes[key] = clean(value);
+  }
+  return { ...log, message: clean(String(log.message)), attributes };
+}
+
+// Fixed, never player-supplied text as the message; put details in attributes. Safe when Sentry is off.
+const log = {
+  debug: (message, attributes) => Sentry.logger.debug(message, attributes),
+  info: (message, attributes) => Sentry.logger.info(message, attributes),
+  warn: (message, attributes) => Sentry.logger.warn(message, attributes),
+  error: (message, attributes) => Sentry.logger.error(message, attributes),
+};
+
 // ---- spans and metrics: thin wrappers so services don't depend on Sentry directly, and never break when it is off ----
 
 /** Times `fn` as a span. `fn` receives the span so it can add attributes once the outcome is known. */
@@ -87,10 +115,11 @@ const distribution = (name, value, unit, attributes) => Sentry.metrics.distribut
 function tagSyntheticTraffic(req, res, next) {
   if (req.headers['x-sidequests-synthetic']) {
     Sentry.getIsolationScope().setTag('synthetic', 'true');
+    Sentry.getIsolationScope().setAttribute('synthetic', true); // also stamps every log emitted during this request
     const active = Sentry.getActiveSpan();
     if (active) Sentry.getRootSpan(active).setAttribute('synthetic', true);
   }
   next();
 }
 
-module.exports = { buildOptions, scrub, withSpan, count, distribution, tagSyntheticTraffic, DATA_COLLECTION };
+module.exports = { buildOptions, scrub, scrubLog, log, withSpan, count, distribution, tagSyntheticTraffic, DATA_COLLECTION };

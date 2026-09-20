@@ -1,6 +1,6 @@
 const { httpError } = require('../errors');
 const { toQuestDto } = require('./questDto');
-const { withSpan, count } = require('../telemetry');
+const { withSpan, count, log } = require('../telemetry');
 
 const shape = (r) => ({
   matchId: Number(r.match_id),
@@ -49,6 +49,7 @@ function createQuests({ matches, quests, profiles, config }) {
     }
     const run = await runOf(uid, m.id); // already active or completed: unchanged
     span.setAttribute('quest.status', run.status);
+    log.info('quest started', { 'quest.source': run.quest.source ?? 'seeded', 'quest.status': run.status });
     return { run };
   });
 
@@ -62,6 +63,7 @@ function createQuests({ matches, quests, profiles, config }) {
     span.setAttribute('quest.source', source);
     if (awarded) {
       count('quests.completed', 1, { source });
+      log.info('quest completed', { 'quest.source': source, 'quest.points_each': config.QUEST_POINTS });
       count('quest.points_awarded', config.QUEST_POINTS * 2); // both players are paid
     }
     return { run, awarded };

@@ -1,6 +1,6 @@
 const { score } = require('./scoring');
 const { httpError } = require('../errors');
-const { withSpan } = require('../telemetry');
+const { withSpan, log } = require('../telemetry');
 
 // DEMO MODE ONLY (DEMO_MODE=true). Simulates a nearby player so the whole match -> quest flow works without
 // Bluetooth hardware. The partner is a throwaway user owned by the real player (never a login) and is removed
@@ -34,6 +34,7 @@ function createDemo({ accounts, profiles, matches, quests, config, schedule = se
     // The simulated player waves back shortly after, so the "waiting" stage is visible.
     const side = partnerId === ua ? 'a' : 'b';
     schedule(() => matches.setResponse(matchId, side, true).catch(console.error), config.DEMO_WAVE_DELAY_MS);
+    log.info('simulated nearby player created (demo mode)');
     return { matchId };
   });
   return { simulateNearby };
