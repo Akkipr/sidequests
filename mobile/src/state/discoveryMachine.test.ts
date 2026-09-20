@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   discoveryReducer as reduce, transition, initialModel, inMatchFlow, isListening, isPolling, serverStatus, violations,
+  wearableState,
   type DiscoveryEvent, type DiscoveryModel,
 } from './discoveryMachine.ts';
 
@@ -223,4 +224,14 @@ test('random event storm: no reachable state is ever contradictory', () => {
       if (isPolling(m)) assert.equal(m.match?.myResponse, true);
     }
   }
+});
+
+test('the wearable display follows the match state', () => {
+  const m = initialModel();
+  assert.equal(wearableState(m), 'NONE');
+  assert.equal(wearableState({ ...m, state: 'scanning' }), 'NONE');
+  assert.equal(wearableState({ ...m, state: 'candidate_detected' }), 'CANDIDATE');
+  assert.equal(wearableState({ ...m, state: 'waiting_for_wave' }), 'WAITING');
+  assert.equal(wearableState({ ...m, state: 'matched' }), 'MATCHED');
+  assert.equal(wearableState({ ...m, state: 'quest_active' }), 'MATCHED');
 });

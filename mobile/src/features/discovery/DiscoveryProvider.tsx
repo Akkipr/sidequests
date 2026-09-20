@@ -5,9 +5,10 @@ import { navigationRef } from '../../app/navigation/navigationRef';
 import * as api from '../../services/api';
 import {
   connectWearable as bleConnect, disconnectWearable, onWearableDisconnect, onWearableMessage, WearableMessage,
+  writeWearableState,
 } from '../../services/ble';
 import {
-  DiscoveryModel, discoveryReducer, inMatchFlow, initialModel, isListening, isPolling, serverStatus,
+  DiscoveryModel, discoveryReducer, inMatchFlow, initialModel, isListening, isPolling, serverStatus, wearableState,
 } from '../../state/discoveryMachine';
 import type { Intent, QuestRun } from '../../types/api';
 import { appLog, traced } from '../../services/monitoring';
@@ -150,6 +151,11 @@ export function DiscoveryProvider({ children }: { children: ReactNode }) {
     return () => { active = false; off(); clearInterval(poll); };
   }, [listening]);
 
+  // ---- 3b. The wearable's display mirrors the match state, and its buttons answer the match. ----
+  // Unlike signals, this is not limited to scanning: the prompt appears exactly while a candidate is open.
+  const shownOnWearable = wearableState(model);
+  useEffect(() => { void writeWearableState(shownOnWearable); }, [shownOnWearable]);
+
   // ---- 4. Waiting for the other wave: poll, with a timeout. Only exists in waiting_for_wave. ----
   const polling = isPolling(model);
   const pollId = model.match?.id;
@@ -291,6 +297,13 @@ export function DiscoveryProvider({ children }: { children: ReactNode }) {
       },
     };
   }, [refreshProfile]);
+
+  // Wave / Not now pressed on the wearable itself. The actions already refuse when no candidate is open,
+  // so a stray press can't answer a match that isn't there.
+  useEffect(() => onWearableMessage(m => {
+    if (m.kind === 'wave') void actions.wave();
+    else if (m.kind === 'pass') void actions.notNow();
+  }), [actions]);
 
   const value = useMemo<Discovery>(() => ({ model, questsVersion, ...actions }), [model, questsVersion, actions]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

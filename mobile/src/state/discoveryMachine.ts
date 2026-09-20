@@ -179,5 +179,12 @@ export function serverStatus(m: DiscoveryModel): Status {
   return m.state === 'scanning' || m.state === 'candidate_detected' || m.state === 'waiting_for_wave' ? m.intent : 'off';
 }
 
+/** What the wearable's display should show. Its buttons answer CANDIDATE, so this must follow the app exactly. */
+export function wearableState(m: DiscoveryModel): 'NONE' | 'CANDIDATE' | 'WAITING' | 'MATCHED' {
+  if (m.state === 'candidate_detected') return 'CANDIDATE';
+  if (m.state === 'waiting_for_wave') return 'WAITING';
+  return inMatchFlow(m.state) || m.state === 'quest_active' ? 'MATCHED' : 'NONE';
+}
+
 /** States in which the Match screen has something to show. */
 export const inMatchFlow = (s: DiscoveryState) => IN_MATCH.includes(s);

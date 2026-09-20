@@ -7,6 +7,10 @@ import { parseWearableMessage, TOKEN_RE, WearableMessage } from './wearableMessa
 export const SERVICE_UUID = 'abcd1234-1234-1234-1234-abcdef123456';
 export const MATCH_UUID = 'abcd1234-1234-1234-1234-abcdef123457'; // notify: NEAR:<peer-token>:<rssi> | IDLE | MATCH (legacy)
 export const TOKEN_UUID = 'abcd1234-1234-1234-1234-abcdef123458'; // read: this wearable's own token (future firmware)
+export const STATE_UUID = 'abcd1234-1234-1234-1234-abcdef123459'; // write: what the phone is showing, for the wearable's display
+
+/** Mirrored to the wearable so its screen can prompt, and its buttons can answer. */
+export type WearableState = 'NONE' | 'CANDIDATE' | 'WAITING' | 'MATCHED';
 const NAME = 'PassingStranger';
 
 export { parseWearableMessage, TOKEN_RE } from './wearableMessage';
@@ -107,6 +111,15 @@ export async function disconnectWearable() {
   const l = dropLink();
   await l?.device.cancelConnection().catch(() => {});
   await forgetWearable();
+}
+
+// Best effort: older firmware has no state characteristic, and a missing display must never break the app.
+export async function writeWearableState(state: WearableState) {
+  const device = link?.device;
+  if (!device) return;
+  await device
+    .writeCharacteristicWithResponseForService(SERVICE_UUID, STATE_UUID, btoa(state))
+    .catch(() => {});
 }
 
 export const forgetWearable = () => storage.remove('wearableId');

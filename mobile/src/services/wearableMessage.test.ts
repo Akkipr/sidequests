@@ -27,3 +27,9 @@ test("a token can't contain ':' (it would break the message), and must be long e
   assert.equal(TOKEN_RE.test('x'.repeat(128)), true);
   assert.equal(TOKEN_RE.test('x'.repeat(129)), false);
 });
+
+test('the wearable buttons answer a match', () => {
+  assert.deepEqual(parse('WAVE'), { kind: 'wave' });
+  assert.deepEqual(parse(' PASS\n'), { kind: 'pass' });
+  assert.equal(parse('WAVEY'), null);
+});
