@@ -8,7 +8,8 @@
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.sidequests.app1"
+      "bundleIdentifier": "com.sidequests.app1",
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.sidequests.app1",

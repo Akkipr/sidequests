@@ -19,6 +19,8 @@ The app reports crashes and errors to Sentry (org `uwaterloo-c7`, project `sydeq
   Keys). Restart Metro with `--clear` after changing it. Remove the variable to turn it off.
 - **Privacy:** no IP addresses, cookies or user are attached (`sendDefaultPii` is off, and we never call `setUser`), because
   SideQuests promises identity stays hidden until both people wave. Expected `AuthError`s (expired session) are not reported.
+  The native SDK does tag each session with a random per-install ID (that is what powers "crash-free users"); it isn't
+  linked to a nickname or account.
 - **Native rebuild needed** after installing the SDK: `cd mobile && npx expo run:ios --device`. Until then the app still runs
   and reports JavaScript errors; native crash reporting starts with the rebuild.
 - **Source maps and debug symbols** are uploaded by the Sentry plugin at *release/EAS build* time and need a
@@ -29,6 +31,32 @@ The app reports crashes and errors to Sentry (org `uwaterloo-c7`, project `sydeq
   Tap it, then look for the event in the project's Issues.
 - The server is not instrumented (the DSN is for the React Native project). Add `@sentry/node` with its own project if you
   want server errors too.
+
+### Releases, crash-free rates and Apdex
+
+Each of these Sentry metrics is fed by something different:
+
+| Sentry metric | Fed by | Set up in |
+|---|---|---|
+| **Number of releases** | the `release` name sent with events and sessions: `sidequests@<version>` from `mobile/app.json` (override with `EXPO_PUBLIC_SENTRY_RELEASE`, e.g. a git SHA set by CI) | `services/monitoring.ts` |
+| **Crash-free sessions** | the SDK's automatic sessions (one per app use, ended after 30 s in the background), grouped by release | `services/monitoring.ts` |
+| **Crash-free users** | the random per-install ID the native SDK adds to each session (automatic, anonymous) | nothing to configure |
+| **Apdex** | *transactions*: every screen change (React Navigation integration) and app start, when tracing is on. Sampled at 100% in development and 20% otherwise (override with `EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE`) | `services/monitoring.ts` + `AppProviders.tsx` |
+
+**To see them:** use the app for a minute (open it, switch between the tabs, background it), then look in the
+`sydequestshtn` project. Releases appear under **Releases** on their own the first time a session arrives, and the count
+grows when you ship a new one. Bump `version` in `mobile/app.json` for a new release and `ios.buildNumber` for a new native
+build. Development builds report as environment `development`, so filter on `production` for real users. Crash-free rates
+need a handful of sessions before they mean anything, and Apdex appears under **Performance**.
+
+**Things that can only be done in Sentry's website** (or with an auth token), and are not set up by the code:
+
+- **The Apdex threshold** (how many milliseconds count as "satisfied") is a project setting in Sentry
+  (Project Settings, then Performance). I couldn't verify Sentry's default from its docs, so check it there.
+- **Alerts and dashboards**, such as an alert when the crash-free session rate drops.
+- **Commits and deploys on a release** (for suspect commits) and **source map upload** need an organisation auth token
+  (`SENTRY_AUTH_TOKEN`, kept out of git). Not configured here, so crashes in release builds show minified JavaScript
+  until it is.
 
 ## WAT2DO event import
 

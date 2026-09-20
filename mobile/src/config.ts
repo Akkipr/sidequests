@@ -9,3 +9,8 @@ export const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === 'true';
 // spam the project. Unset = Sentry is off. (Uploading source maps at build time needs SENTRY_AUTH_TOKEN, which must
 // never be committed; see the README.)
 export const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN ?? '';
+
+// Optional overrides for release health / performance (see services/monitoring.ts). Leave unset for the defaults:
+// release = <slug>@<version> from app.json, and tracing on for every session in development, 20% otherwise.
+export const SENTRY_RELEASE = process.env.EXPO_PUBLIC_SENTRY_RELEASE ?? '';
+export const SENTRY_TRACES_SAMPLE_RATE_RAW = process.env.EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE;

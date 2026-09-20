@@ -13,3 +13,20 @@ export function isExpectedError(error: unknown): boolean {
 export function dropExpected<E>(event: E, hint?: { originalException?: unknown }): E | null {
   return isExpectedError(hint?.originalException) ? null : event;
 }
+
+/**
+ * The release name Sentry groups sessions and errors under ("number of releases", crash-free rates per release).
+ * An explicit override (e.g. a git SHA set by CI) wins; otherwise it is `<slug>@<version>` from app.json, so bumping
+ * the app version is what starts a new release.
+ */
+export function releaseName({ override, slug, version }: { override?: string | null; slug: string; version: string }): string {
+  const custom = override?.trim();
+  return custom ? custom : `${slug}@${version}`;
+}
+
+/** Parses a 0..1 sampling rate from an env string; anything missing, non-numeric or out of range uses the fallback. */
+export function parseSampleRate(raw: string | undefined | null, fallback: number): number {
+  if (raw === undefined || raw === null || raw.trim() === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 && n <= 1 ? n : fallback;
+}
