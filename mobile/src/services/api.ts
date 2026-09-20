@@ -3,6 +3,8 @@ import type {
   BlockedEntry, MatchView, Profile, ProfileInput, QuestOverview, QuestRun, SignalPayload, SignalResult,
   SignupInput, Status,
 } from '../types/api';
+import { routeName } from './monitoringFilters';
+import { traced } from './monitoring';
 import { storage } from './storage';
 
 // ---- session token ----
@@ -41,7 +43,11 @@ function send(url: string, init: RequestInit = {}) {
     .finally(() => clearTimeout(t));
 }
 
-async function request<T>(method: string, path: string, body?: object): Promise<T> {
+// Every call is timed as `METHOD /route/:pattern`, which feeds Sentry's Performance and Apdex.
+const request = <T>(method: string, path: string, body?: object): Promise<T> =>
+  traced(`${method} ${routeName(path)}`, () => rawRequest<T>(method, path, body));
+
+async function rawRequest<T>(method: string, path: string, body?: object): Promise<T> {
   const t = await getToken();
   if (!t) throw new AuthError('Not signed in');
   const r = await send(`${API_URL}${path}`, {
@@ -65,9 +71,9 @@ const post = <T>(path: string, body: object = {}) => request<T>('POST', path, bo
 
 // ---- auth (the only unauthenticated calls) ----
 async function authenticate(path: '/signup' | '/login', body: object): Promise<Profile> {
-  const r = await send(`${API_URL}${path}`, {
+  const r = await traced(`POST ${path}`, () => send(`${API_URL}${path}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  });
+  }));
   if (!r.ok) {
     const { error } = (await r.json().catch(() => ({ error: `${path} failed: ${r.status}` }))) as { error: string };
     throw new ApiError(error, r.status);

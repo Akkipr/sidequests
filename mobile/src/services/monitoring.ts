@@ -1,7 +1,7 @@
 import * as Sentry from '@sentry/react-native';
 import type { NavigationContainerRefWithCurrent, ParamListBase } from '@react-navigation/native';
 import { expo } from '../../app.json';
-import { SENTRY_DSN, SENTRY_RELEASE, SENTRY_TRACES_SAMPLE_RATE_RAW } from '../config';
+import { API_URL, SENTRY_DSN, SENTRY_RELEASE, SENTRY_TRACES_SAMPLE_RATE_RAW } from '../config';
 import { dropExpected, parseSampleRate, releaseName } from './monitoringFilters';
 
 // Crash and error reporting plus release health and performance. Off unless EXPO_PUBLIC_SENTRY_DSN is set.
@@ -28,6 +28,7 @@ export function initMonitoring() {
     release: RELEASE,
     dist: DIST,
     sendDefaultPii: false,
+    initialScope: { tags: { component: 'app' } }, // the API reports to this same project as component:api
 
     // Release health: one session per app use, ended after 30 s in the background. (These are the defaults, spelled out
     // because the metrics depend on them.)
@@ -37,6 +38,9 @@ export function initMonitoring() {
     // Performance / Apdex. Every session is traced while developing so data shows up quickly; production keeps 20%.
     tracesSampleRate: parseSampleRate(SENTRY_TRACES_SAMPLE_RATE_RAW, __DEV__ ? 1 : 0.2),
     integrations: [navigationIntegration],
+    // Send trace headers to OUR API only, so an action in the app and the server request it caused show up as one trace.
+    // (The headers carry ids and the release name, nothing about the player.)
+    tracePropagationTargets: [API_URL],
 
     beforeSend: dropExpected,
   });
@@ -45,6 +49,12 @@ export function initMonitoring() {
 // Call once the navigation container is ready so screen changes become transactions.
 export function registerNavigation(container: NavigationContainerRefWithCurrent<ParamListBase>) {
   if (monitoringEnabled) navigationIntegration.registerNavigationContainer(container);
+}
+
+// Times `fn` as its own span/transaction (this is what gives Performance and Apdex real numbers for the things people
+// actually do). `name` must be a pattern like "POST /matches/:id/respond", never something containing a real id.
+export function traced<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  return Sentry.startSpan({ name, op: 'app.action' }, fn);
 }
 
 // Wraps the root component so render errors are caught and reported.

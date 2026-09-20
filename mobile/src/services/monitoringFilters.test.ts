@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dropExpected, isExpectedError, parseSampleRate, releaseName } from './monitoringFilters.ts';
+import { dropExpected, isExpectedError, parseSampleRate, releaseName, routeName } from './monitoringFilters.ts';
 
 class AuthError extends Error {
   name = 'AuthError';
@@ -41,4 +41,13 @@ test('sampling rates are parsed strictly and fall back on anything odd', () => {
   assert.equal(parseSampleRate('0', 1), 0);   // zero is a real setting, not "missing"
   assert.equal(parseSampleRate('1', 0.2), 1);
   for (const bad of [undefined, null, '', '  ', 'abc', '-0.1', '1.5', 'NaN', 'Infinity']) assert.equal(parseSampleRate(bad, 0.25), 0.25, String(bad));
+});
+
+test('span names use the route pattern, never a real id or query string', () => {
+  assert.equal(routeName('/matches/123/respond'), '/matches/:id/respond');
+  assert.equal(routeName('/matches/9/quest/start'), '/matches/:id/quest/start');
+  assert.equal(routeName('/matches/9?token=secret'), '/matches/:id');
+  assert.equal(routeName('/blocks/0a496dfe-209a-4154-b36e-8598b52009ba'), '/blocks/:id'); // a uuid that starts with a digit
+  assert.equal(routeName('/quests'), '/quests');
+  assert.equal(routeName('/profile'), '/profile');
 });

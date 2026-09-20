@@ -30,3 +30,11 @@ export function parseSampleRate(raw: string | undefined | null, fallback: number
   const n = Number(raw);
   return Number.isFinite(n) && n >= 0 && n <= 1 ? n : fallback;
 }
+
+const UUID = /\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}(?=\/|$)/g;
+const NUMBER = /\/\d+(?=\/|$)/g;
+
+/** "/matches/123/respond?x=1" -> "/matches/:id/respond". Span names use the pattern, never a real id or query. */
+export function routeName(path: string): string {
+  return path.replace(/[?#].*$/, '').replace(UUID, '/:id').replace(NUMBER, '/:id');
+}

@@ -10,6 +10,7 @@ import {
   DiscoveryModel, discoveryReducer, inMatchFlow, initialModel, isListening, isPolling, serverStatus,
 } from '../../state/discoveryMachine';
 import type { Intent, QuestRun } from '../../types/api';
+import { traced } from '../../services/monitoring';
 import { useSession } from '../auth/SessionProvider';
 
 const POLL_MS = 3000;            // how often to ask whether the other person waved back
@@ -86,7 +87,7 @@ export function DiscoveryProvider({ children }: { children: ReactNode }) {
   // ---- 2. Wearable connection ----
   async function runConnect() {
     send({ type: 'WEARABLE_CONNECTING' });
-    inflight.current ??= bleConnect().finally(() => { inflight.current = null; }); // never two connects at once
+    inflight.current ??= traced('wearable.connect', bleConnect).finally(() => { inflight.current = null; }); // never two connects at once
     try {
       const { token } = await inflight.current;
       // Exact-peer pairing needs the server to know which account owns this wearable.
