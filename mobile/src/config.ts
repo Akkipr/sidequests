@@ -4,3 +4,8 @@ export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.1.10:3
 // Demo mode (must match DEMO_MODE on the server): shows "SIMULATE NEARBY PLAYER" and lets discovery run
 // without a wearable. Off by default; when off, none of the demo UI is rendered.
 export const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === 'true';
+
+// Sentry error reporting. The DSN is not a secret, but it is kept out of the source so a public repo can't be used to
+// spam the project. Unset = Sentry is off. (Uploading source maps at build time needs SENTRY_AUTH_TOKEN, which must
+// never be committed; see the README.)
+export const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN ?? '';

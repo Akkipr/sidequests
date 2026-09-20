@@ -186,7 +186,8 @@ sidequests/
 │   ├── App.tsx              Loads the font, mounts providers and the root navigator
 │   ├── index.ts             Entry point
 │   ├── app.json             Config (BLE plugin, dark UI, bundle IDs)
-│   ├── .env                 EXPO_PUBLIC_API_URL (the tunnel URL), EXPO_PUBLIC_DEMO_MODE
+│   ├── .env                 EXPO_PUBLIC_API_URL (the tunnel URL), EXPO_PUBLIC_DEMO_MODE, EXPO_PUBLIC_SENTRY_DSN
+│   ├── metro.config.js      Sentry's Metro config (adds debug IDs for source maps)
 │   ├── scripts/patch-xcode26.sh   postinstall patch for older Xcode (safe to re-run)
 │   ├── ios/                 Generated native project (dev-client build)
 │   └── src/
@@ -194,7 +195,7 @@ sidequests/
 │       ├── components/pixel-ui/   Design system: colours, Txt, Panel, Btn, Chip, Bar, Field…
 │       ├── constants/       Archetypes, quiz questions, avatars, intents
 │       ├── features/        auth · onboarding · discovery · matches · quests · profile
-│       ├── services/        api.ts (typed client), ble.ts, wearableMessage.ts, storage.ts
+│       ├── services/        api.ts (typed client), ble.ts, wearableMessage.ts, storage.ts, monitoring.ts (Sentry)
 │       ├── state/           discoveryMachine.ts (the lifecycle) and its tests
 │       ├── types/           Shared API types
 │       └── config.ts        API URL and demo-mode flag
@@ -261,4 +262,5 @@ The iOS simulator has no Bluetooth, so the real wearable features need a physica
 - **The WAT2DO importer depends on a third party's page markup,** which can change without notice (it then fails loudly). WAT2DO publishes no terms, so ask them before relying on it beyond a demo. The event pictures are loaded from their servers.
 - **No password recovery, and no rate limiting on login.**
 - **`timestamp` on a signal is accepted but not enforced.**
+- **Sentry is app-only and needs a native rebuild.** The server isn't instrumented, and uploading source maps needs a `SENTRY_AUTH_TOKEN` at release-build time (see the README).
 - **No linter is configured,** and the mobile UI has no automated tests beyond the state machine and message parser.

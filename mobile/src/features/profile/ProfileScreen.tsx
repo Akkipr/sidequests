@@ -3,7 +3,9 @@ import { Alert, View } from 'react-native';
 import { AvatarPicker, ArchetypePicker, Prefs, Quiz, quizComplete, toProfileInput } from '../../components/pixel-ui/fields';
 import { Btn, C, Panel, Screen, Txt } from '../../components/pixel-ui';
 import { archetypeById } from '../../constants/archetypes';
+import { DEMO_MODE } from '../../config';
 import { errorMessage } from '../../services/api';
+import { monitoringEnabled, sendTestError } from '../../services/monitoring';
 import type { ProfileInput } from '../../types/api';
 import { useProfile, useSession } from '../auth/SessionProvider';
 import { useDiscovery } from '../discovery/DiscoveryProvider';
@@ -108,6 +110,11 @@ export default function ProfileScreen() {
               onPress={() => confirm('Unblock?', 'You could be matched with this person again.', 'Unblock', () => void remove(b.id).catch(e => Alert.alert('Error', errorMessage(e))))} />
           </Panel>
         ))}
+
+      {DEMO_MODE && monitoringEnabled && (
+        <Btn small color={C.dim} label="SEND TEST ERROR TO SENTRY"
+          onPress={() => void sendTestError().then(() => Alert.alert('Sent', 'A test error was sent to Sentry. Check the sydequestshtn project.'))} />
+      )}
 
       <Btn small color={C.pink} label="SIGN OUT"
         onPress={() => confirm('SIGN OUT?', "You'll need your name and password to come back.", 'Sign out', () => void signOut(), true)} />

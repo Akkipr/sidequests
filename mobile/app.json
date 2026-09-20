@@ -32,7 +32,15 @@
           "bluetoothAlwaysPermission": "SideQuests connects to your wearable to know when a compatible person is nearby."
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "uwaterloo-c7",
+          "project": "sydequestshtn",
+          "url": "https://de.sentry.io"
+        }
+      ]
     ]
   }
 }
