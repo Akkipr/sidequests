@@ -1,6 +1,6 @@
-# SideQuests
+# SydeQuests
 
-SideQuests helps strangers who are physically near each other meet, and gives them something to do together. See
+SydeQuests helps strangers who are physically near each other meet, and gives them something to do together. See
 [OVERVIEW.md](OVERVIEW.md) for how the app looks and works end to end, and
 [docs/firmware-protocol.md](docs/firmware-protocol.md) for the wearable.
 
@@ -11,6 +11,15 @@ db/       schema.sql (safe to re-run)
 docs/     wearable firmware protocol
 ```
 
+<img width="1161" height="560" alt="image" src="https://github.com/user-attachments/assets/6f1f821e-d3e5-4ea3-8b87-3d5772cd5e51" />
+<img width="240" height="560" alt="image" src="https://github.com/user-attachments/assets/2cb9d398-89d0-4eb5-8753-c989652d55ab" />
+<img width="240" height="545" alt="image" src="https://github.com/user-attachments/assets/e670f84f-d7cf-4ea3-8505-ed42d5d60ba0" />
+<img width="240" height="541" alt="image" src="https://github.com/user-attachments/assets/2d6a6982-41b6-4b9b-93f6-d8ac1a2d268f" />
+<img width="240" height="553" alt="image" src="https://github.com/user-attachments/assets/d099075d-835a-4713-b8aa-f4a28b66880e" />
+
+
+
+
 ## Error reporting (Sentry)
 
 The app reports crashes and errors to Sentry (org `uwaterloo-c7`, project `sydequestshtn`, EU region).
@@ -18,7 +27,7 @@ The app reports crashes and errors to Sentry (org `uwaterloo-c7`, project `sydeq
 - **Off by default.** It only runs when `EXPO_PUBLIC_SENTRY_DSN` is set in `mobile/.env` (Sentry: Project Settings → Client
   Keys). Restart Metro with `--clear` after changing it. Remove the variable to turn it off.
 - **Privacy:** no IP addresses, cookies or user are attached (`sendDefaultPii` is off, and we never call `setUser`), because
-  SideQuests promises identity stays hidden until both people wave. Expected `AuthError`s (expired session) are not reported.
+  SydeQuests promises identity stays hidden until both people wave. Expected `AuthError`s (expired session) are not reported.
   The native SDK does tag each session with a random per-install ID (that is what powers "crash-free users"); it isn't
   linked to a nickname or account.
 - **Native rebuild needed** after installing the SDK: `cd mobile && npx expo run:ios --device`. Until then the app still runs
@@ -49,7 +58,7 @@ Each of these Sentry metrics is fed by something different:
 
 | Sentry metric | Fed by | Set up in |
 |---|---|---|
-| **Number of releases** | the `release` name sent with events and sessions: `sidequests@<version>` from `mobile/app.json` (override with `EXPO_PUBLIC_SENTRY_RELEASE`, e.g. a git SHA set by CI) | `services/monitoring.ts` |
+| **Number of releases** | the `release` name sent with events and sessions: `SydeQuests@<version>` from `mobile/app.json` (override with `EXPO_PUBLIC_SENTRY_RELEASE`, e.g. a git SHA set by CI) | `services/monitoring.ts` |
 | **Crash-free sessions** | the SDK's automatic sessions (one per app use, ended after 30 s in the background), grouped by release | `services/monitoring.ts` |
 | **Crash-free users** | the random per-install ID the native SDK adds to each session (automatic, anonymous) | nothing to configure |
 | **Apdex** | *transactions*: every screen change (React Navigation integration) and app start, when tracing is on. Sampled at 100% in development and 20% otherwise (override with `EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE`) | `services/monitoring.ts` + `AppProviders.tsx` |
@@ -74,7 +83,7 @@ need a handful of sessions before they mean anything, and Apdex appears under **
 The server reports to Sentry too (`server/telemetry.js`, started first in `server/index.js`), to the **same project as the
 app** (`sydequestshtn`), so a trace that starts on the phone and continues on the API is one trace in one place. Both sides
 tag their events, so the two can be separated again: filter **`component:app`** (the phone) or **`component:api`** (the
-server). The API's release is `sidequests-api@<version>`, distinct from the app's `sidequests@<version>`. Because the project
+server). The API's release is `SydeQuests-api@<version>`, distinct from the app's `SydeQuests@<version>`. Because the project
 is shared, filter by `component` (or environment) when reading **Apdex** and **crash-free** numbers, or server traffic will be
 counted alongside the app's.
 
@@ -111,13 +120,13 @@ npm run demo:traffic -- --players 12 --rounds 3 --concurrency 4
 
 Disposable players sign up, get matched with a simulated player, wave, pick and complete quests, hit the everyday error
 paths, and a few deliberate 500s (`POST /demo/test-error`). About 650 requests in about a minute. **This is synthetic, and it
-says so:** every request is sent with `X-SideQuests-Synthetic`, which the server turns into a `synthetic:true` tag, so you
+says so:** every request is sent with `X-SydeQuests-Synthetic`, which the server turns into a `synthetic:true` tag, so you
 can filter it out (or in), and the players are deleted afterwards (`--keep` to leave them). Tell judges it is generated load.
 It refuses to run against a server that isn't in demo mode.
 
 ## WAT2DO event import
 
-SideQuests can suggest real University of Waterloo events from [wat2do.ca](https://wat2do.ca) as side-quests.
+SydeQuests can suggest real University of Waterloo events from [wat2do.ca](https://wat2do.ca) as side-quests.
 
 ```
 WAT2DO ──(headless Chromium, on a schedule or on demand)──► our server ──► Postgres `quests` ──► our API ──► the app
@@ -230,7 +239,7 @@ and a different time format); pointing `WAT2DO_BASE_URL` there will need a match
 
 ### Please be a good citizen
 
-The importer identifies itself (`SideQuests-hackathon-importer/0.1`), reads only pages that `robots.txt` allows, and keeps
+The importer identifies itself (`SydeQuests-hackathon-importer/0.1`), reads only pages that `robots.txt` allows, and keeps
 its volume low. When I checked, WAT2DO **published no terms of use or content policy**: its footer links only to Events,
 Clubs, About, Contact and RSS, and `/terms` and `/privacy` don't exist. Its About page describes a small student-run
 project (funded by WUSA's Student Life Endowment Fund) and its Contact page invites questions and feedback. So I can't
